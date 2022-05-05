@@ -21,13 +21,17 @@ impl<'a> Client<'a> {
         unimplemented!();
     }
 
-    pub async fn retrieve<'b>(&self, reference: EntityReference<'b>) -> Result<Entity<'b>> {
+    pub async fn retrieve<'b>(&self, reference: EntityReference<'b>) -> Result<Entity<'a>> {
         unimplemented!();
     }
 
-    pub async fn retrieve_multiple<'b>(&self, query: Query<'b>) -> Result<Vec<Entity<'b>>> {
+    pub async fn retrieve_multiple<'b>(&self, query: Query<'b>) -> Result<ResultCollection<'a>> {
         unimplemented!();
     }
+}
+
+pub struct ResultCollection<'a> {
+    pub entities: Vec<Entity<'a>>,
 }
 
 pub type Result<T> = std::result::Result<T, DataverseError>;

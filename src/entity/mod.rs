@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Display};
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
@@ -33,7 +33,20 @@ pub enum AttributeValue<'a> {
     Text(String),
     DateTime(DateTime<Utc>),
     EntityReference(EntityReference<'a>),
-    EntityReferenceCollection(Vec<EntityReference<'a>>),
+}
+
+impl<'a> Display for AttributeValue<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use AttributeValue::*;
+        match self {
+            Boolean(value) => f.write_fmt(format_args!("{}", value)),
+            Integer(value) => f.write_fmt(format_args!("{}", value)),
+            Decimal(value) => f.write_fmt(format_args!("{}", value)),
+            Text(value) => f.write_fmt(format_args!("'{}'", value)),
+            DateTime(value) => f.write_fmt(format_args!("{}", value)),
+            EntityReference(value) => f.write_fmt(format_args!("{}", value)),
+        }
+    }
 }
 
 #[derive(PartialEq, Eq)]
@@ -48,5 +61,11 @@ impl<'a> EntityReference<'a> {
             logical_name,
             id,
         }
+    }
+}
+
+impl<'a> Display for EntityReference<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{}", self.id))
     }
 }
