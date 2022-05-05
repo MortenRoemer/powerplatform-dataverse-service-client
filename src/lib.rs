@@ -1,3 +1,7 @@
+pub mod client;
+pub mod entity;
+pub mod query;
+
 #[cfg(test)]
 mod tests {
     #[test]
