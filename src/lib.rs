@@ -1,12 +1,7 @@
+pub mod auth;
 pub mod client;
-pub mod entity;
+pub mod error;
 pub mod query;
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
-    }
-}
+pub mod reference;
+pub mod result;
+pub mod select;
