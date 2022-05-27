@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use lazy_static::lazy_static;
 use regex::Regex;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
@@ -11,7 +11,7 @@ use crate::{
     query::Query,
     reference::Reference,
     result::{IntoDataverseResult, Result},
-    select::Select,
+    entity::{WritableEntity, ReadableEntity}, batch::Batch,
 };
 
 lazy_static! {
@@ -20,7 +20,7 @@ lazy_static! {
             .unwrap();
 }
 
-static VERSION: &str = "9.2";
+pub static VERSION: &str = "9.2";
 
 pub struct Client<A: Authenticate> {
     pub url: &'static str,
@@ -62,7 +62,7 @@ impl<A: Authenticate> Client<A> {
         Self { url, backend, auth }
     }
 
-    pub async fn create<E: Serialize + Reference>(&self, entity: &E) -> Result<Uuid> {
+    pub async fn create(&self, entity: &impl WritableEntity) -> Result<Uuid> {
         let token = self.auth.get_valid_token().await?;
         let reference = entity.get_reference();
         let url_path = self.build_simple_url(reference.entity_name);
@@ -100,7 +100,7 @@ impl<A: Authenticate> Client<A> {
         Uuid::parse_str(uuid_segment.as_str()).into_dataverse_result()
     }
 
-    pub async fn update<E: Serialize + Reference>(&self, entity: &E) -> Result<()> {
+    pub async fn update(&self, entity: &impl WritableEntity) -> Result<()> {
         let token = self.auth.get_valid_token().await?;
         let reference = entity.get_reference();
         let url_path = self.build_targeted_url(reference.entity_name, reference.entity_id);
@@ -129,7 +129,7 @@ impl<A: Authenticate> Client<A> {
         Ok(())
     }
 
-    pub async fn upsert<E: Serialize + Reference>(&self, entity: &E) -> Result<()> {
+    pub async fn upsert(&self, entity: &impl WritableEntity) -> Result<()> {
         let token = self.auth.get_valid_token().await?;
         let reference = entity.get_reference();
         let url_path = self.build_targeted_url(reference.entity_name, reference.entity_id);
@@ -157,7 +157,7 @@ impl<A: Authenticate> Client<A> {
         Ok(())
     }
 
-    pub async fn delete<R: Reference>(&self, reference: &R) -> Result<()> {
+    pub async fn delete(&self, reference: &impl Reference) -> Result<()> {
         let token = self.auth.get_valid_token().await?;
         let reference = reference.get_reference();
         let url_path = self.build_targeted_url(reference.entity_name, reference.entity_id);
@@ -183,9 +183,9 @@ impl<A: Authenticate> Client<A> {
         Ok(())
     }
 
-    pub async fn retrieve<R: Reference, E: DeserializeOwned + Select>(
+    pub async fn retrieve<E: ReadableEntity>(
         &self,
-        reference: &R,
+        reference: &impl Reference,
     ) -> Result<E> {
         let token = self.auth.get_valid_token().await?;
         let reference = reference.get_reference();
@@ -215,7 +215,7 @@ impl<A: Authenticate> Client<A> {
         serde_json::from_slice(content.as_ref()).into_dataverse_result()
     }
 
-    pub async fn retrieve_multiple<E: DeserializeOwned + Select>(
+    pub async fn retrieve_multiple<E: ReadableEntity>(
         &self,
         query: &Query,
     ) -> Result<Vec<E>> {
@@ -251,6 +251,34 @@ impl<A: Authenticate> Client<A> {
         }
 
         Ok(entities)
+    }
+
+    pub async fn execute(&self, batch: &Batch) -> Result<()> {
+        let token = self.auth.get_valid_token().await?;
+        let url_path = self.build_simple_url("$batch");
+
+        let response = self
+            .backend
+            .post(url_path)
+            .bearer_auth(token)
+            .header("OData-MaxVersion", "4.0")
+            .header("OData-Version", "4.0")
+            .header("Content-Type", format!("multipart/mixed; boundary=batch_{}", batch.get_batch_id()))
+            .header("Accept", "application/json")
+            .body(batch.to_string())
+            .send()
+            .await
+            .into_dataverse_result()?;
+
+        if response.status().is_client_error() || response.status().is_server_error() {
+            let error_message = response
+                .text()
+                .await
+                .unwrap_or_else(|_| String::from("no error details provided from server"));
+            return Err(DataverseError::new(error_message));
+        }
+
+        Ok(())
     }
 
     fn build_simple_url(&self, table_name: &str) -> String {
