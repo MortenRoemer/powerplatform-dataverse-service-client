@@ -1,3 +1,23 @@
+/*!
+module for creating clients with various authentication methods
+
+Each client has the type `Client<A: Authenticate>`.
+You can create a client with the functions provided by this module.
+
+# Examples
+```rust
+let client_id = String::from("<clientid>");
+let client_secret = String::from("<clientsecret>");
+
+let client = Client::with_client_secret_auth(
+    "https://instance.crm.dynamics.com/",
+    "12345678-1234-1234-1234-123456789012",
+    client_id,
+    client_secret,
+);
+```
+*/
+
 use std::time::Duration;
 
 use lazy_static::lazy_static;
@@ -21,8 +41,28 @@ lazy_static! {
             .unwrap();
 }
 
+/// Microsoft Dataverse Web-API Version this client uses
 pub static VERSION: &str = "9.2";
 
+/**
+A client capable of connecting to a dataverse environment
+
+A client should be created once and then reused to take advantage of its
+connection-pooling.
+
+# Examples
+```rust
+let client_id = String::from("<clientid>");
+let client_secret = String::from("<clientsecret>");
+
+let client = Client::with_client_secret_auth(
+    "https://instance.crm.dynamics.com/",
+    "12345678-1234-1234-1234-123456789012",
+    client_id,
+    client_secret,
+);
+```
+*/
 pub struct Client<A: Authenticate> {
     pub url: &'static str,
     backend: reqwest::Client,
@@ -30,6 +70,28 @@ pub struct Client<A: Authenticate> {
 }
 
 impl Client<ClientSecretAuth> {
+
+    /**
+    Creates a dataverse client that uses client/secret authentication
+
+    Please note that this function will not fail right away even when the
+    provided credentials are invalid. This is because the authentication
+    is handled lazily and a token is only acquired on the first call or
+    when an acquired token is no longer valid and needs to be refreshed
+
+    # Examples
+    ```rust
+    let client_id = String::from("<clientid>");
+    let client_secret = String::from("<clientsecret>");
+
+    let client = Client::with_client_secret_auth(
+        "https://instance.crm.dynamics.com/",
+        "12345678-1234-1234-1234-123456789012",
+        client_id,
+        client_secret,
+    );
+    ```
+    */
     pub fn with_client_secret_auth(
         url: &'static str,
         tenant_id: &'static str,
@@ -59,10 +121,82 @@ impl Client<ClientSecretAuth> {
 }
 
 impl<A: Authenticate> Client<A> {
+    
+    /**
+    Creates a dataverse client with a custom authentication handler and backend
+
+    This function may not panic so the custom authentication should follow these
+    rules:
+    - tokens should be acquired lazily
+    - tokens should be cached and reused where possible
+    - each call to the `get_valid_token()` function should give a token that is valid
+    for at least the next 2 minutes
+
+    # Examples
+    ```rust
+    let client = reqwest::Client::builder()
+        .https_only(true)
+        .connect_timeout(Duration::from_secs(120))
+        .timeout(Duration::from_secs(120))
+        .build()
+        .unwrap();
+
+    let auth = ClientSecretAuth::new(
+        client.clone(),
+        format!(
+            "https://login.microsoftonline.com/{}/oauth2/v2.0/token",
+            tenant_id
+        ),
+        format!("{}.default", url),
+        client_id,
+        client_secret,
+    );
+
+    Client::new(url, client, auth)
+    ```
+    */
     pub fn new(url: &'static str, backend: reqwest::Client, auth: A) -> Self {
         Self { url, backend, auth }
     }
 
+    /**
+    Writes the given entity into the current dataverse instance and returns its generated Uuid
+
+    This may fail for any of these reasons
+    - An authentication failure
+    - A serde serialization error
+    - Any http client or server error
+    - there is already a record with this Uuid in the table
+
+    # Examples
+    ```rust
+    let contact = Contact {
+        contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789012").unwrap(),
+        firstname: String::from("Testy"),
+        lastname: String::from("McTestface"),
+    };
+
+    client.create(&contact).await.unwrap();
+
+    #[derive(Serialize)]
+    struct Contact {
+        contactid: Uuid,
+        firstname: String,
+        lastname: String,
+    }
+
+    impl WritableEntity for Contact {}
+
+    impl Reference for Contact {
+        fn get_reference(&self) -> ReferenceStruct {
+            ReferenceStruct::new(
+                "contacts", 
+                self.contactid,
+            )
+        }
+    }
+    ```
+    */
     pub async fn create(&self, entity: &impl WritableEntity) -> Result<Uuid> {
         let token = self.auth.get_valid_token().await?;
         let reference = entity.get_reference();
@@ -101,6 +235,46 @@ impl<A: Authenticate> Client<A> {
         Uuid::parse_str(uuid_segment.as_str()).into_dataverse_result()
     }
 
+    /**
+    Updates the attributes of the gven entity in the current dataverse instance
+
+    Please note that only those attributes are updated that are present in the
+    serialization payload. Other attributes are untouched
+
+    This may fail for any of these reasons
+    - An authentication failure
+    - A serde serialization error
+    - Any http client or server error
+    - there is no record with this Uuid in the table
+
+    # Examples
+    ```rust
+    let contact = Contact {
+        contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789012").unwrap(),
+        firstname: String::from("Testy"),
+        lastname: String::from("McTestface"),
+    };
+
+    client.update(&contact).await.unwrap();
+
+    #[derive(Serialize)]
+    struct Contact {
+        contactid: Uuid,
+        firstname: String,
+        lastname: String,
+    }
+
+    impl WritableEntity for Contact {}
+
+    impl Reference for Contact {
+        fn get_reference(&self) -> ReferenceStruct {
+            ReferenceStruct::new(
+                "contacts", 
+                self.contactid,
+            )
+        }
+    }
+    */
     pub async fn update(&self, entity: &impl WritableEntity) -> Result<()> {
         let token = self.auth.get_valid_token().await?;
         let reference = entity.get_reference();
@@ -130,6 +304,45 @@ impl<A: Authenticate> Client<A> {
         Ok(())
     }
 
+    /**
+    Updates or creates the given entity in the current dataverse instance
+
+    Please note that only those attributes are updated that are present in the
+    serialization payload. Other attributes are untouched
+
+    This may fail for any of these reasons
+    - An authentication failure
+    - A serde serialization error
+    - Any http client or server error
+
+    # Examples
+    ```rust
+    let contact = Contact {
+        contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789012").unwrap(),
+        firstname: String::from("Testy"),
+        lastname: String::from("McTestface"),
+    };
+
+    client.upsert(&contact).await.unwrap();
+
+    #[derive(Serialize)]
+    struct Contact {
+        contactid: Uuid,
+        firstname: String,
+        lastname: String,
+    }
+
+    impl WritableEntity for Contact {}
+
+    impl Reference for Contact {
+        fn get_reference(&self) -> ReferenceStruct {
+            ReferenceStruct::new(
+                "contacts", 
+                self.contactid,
+            )
+        }
+    }
+    */
     pub async fn upsert(&self, entity: &impl WritableEntity) -> Result<()> {
         let token = self.auth.get_valid_token().await?;
         let reference = entity.get_reference();
