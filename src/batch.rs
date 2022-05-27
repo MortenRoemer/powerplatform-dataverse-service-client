@@ -1,8 +1,13 @@
-use std::fmt::{Write, Display};
+use std::fmt::{Display, Write};
 
 use uuid::Uuid;
 
-use crate::{entity::WritableEntity, reference::Reference, result::{Result, IntoDataverseResult}, client::VERSION};
+use crate::{
+    client::VERSION,
+    entity::WritableEntity,
+    reference::Reference,
+    result::{IntoDataverseResult, Result},
+};
 
 pub struct Batch {
     url: &'static str,
@@ -45,9 +50,9 @@ impl Batch {
     pub fn create(&mut self, entity: &impl WritableEntity) -> Result<()> {
         let reference = entity.get_reference();
         let entity = serde_json::to_string(entity).into_dataverse_result()?;
-        
+
         write!(
-            self.payload, 
+            self.payload,
             "--changeset_{}\nContent-Type: application/http\nContent-Transfer-Encoding:binary\nContent-Id: {}\n\nPOST {}api/data/v{}/{} HTTP/1.1\nContent-Type: application/json;type=entry\n\n{}\n", 
             self.dataset_id.as_simple(),
             self.next_content_id,
@@ -64,9 +69,9 @@ impl Batch {
     pub fn update(&mut self, entity: &impl WritableEntity) -> Result<()> {
         let reference = entity.get_reference();
         let entity = serde_json::to_string(entity).into_dataverse_result()?;
-        
+
         write!(
-            self.payload, 
+            self.payload,
             "--changeset_{}\nContent-Type: application/http\nContent-Transfer-Encoding:binary\nContent-Id: {}\n\nPATCH {}api/data/v{}/{}({}) HTTP/1.1\nContent-Type: application/json;type=entry\nIf-Match: *\n\n{}\n", 
             self.dataset_id.as_simple(),
             self.next_content_id,
@@ -84,9 +89,9 @@ impl Batch {
     pub fn upsert(&mut self, entity: &impl WritableEntity) -> Result<()> {
         let reference = entity.get_reference();
         let entity = serde_json::to_string(entity).into_dataverse_result()?;
-        
+
         write!(
-            self.payload, 
+            self.payload,
             "--changeset_{}\nContent-Type: application/http\nContent-Transfer-Encoding:binary\nContent-Id: {}\n\nPATCH {}api/data/v{}/{}({}) HTTP/1.1\nContent-Type: application/json;type=entry\n\n{}\n", 
             self.dataset_id.as_simple(),
             self.next_content_id,
@@ -103,9 +108,9 @@ impl Batch {
 
     pub fn delete(&mut self, entity: &impl Reference) -> Result<()> {
         let reference = entity.get_reference();
-        
+
         write!(
-            self.payload, 
+            self.payload,
             "--changeset_{}\nContent-Type: application/http\nContent-Transfer-Encoding:binary\nContent-Id: {}\n\nDELETE {}api/data/v{}/{}({}) HTTP/1.1\n\n", 
             self.dataset_id.as_simple(),
             self.next_content_id,
@@ -124,7 +129,7 @@ impl Display for Batch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let batch_id = self.batch_id.as_simple();
         let dataset_id = self.dataset_id.as_simple();
-        
+
         f.write_fmt(
             format_args!(
                 "--batch_{}\nContent-Type: multipart/mixed; boundary=changeset_{}\n\n{}--changeset_{}--\n--batch_{}--",

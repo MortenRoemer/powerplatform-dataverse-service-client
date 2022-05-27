@@ -7,11 +7,12 @@ use uuid::Uuid;
 
 use crate::{
     auth::{client_secret::ClientSecretAuth, Authenticate},
+    batch::Batch,
+    entity::{ReadableEntity, WritableEntity},
     error::DataverseError,
     query::Query,
     reference::Reference,
     result::{IntoDataverseResult, Result},
-    entity::{WritableEntity, ReadableEntity}, batch::Batch,
 };
 
 lazy_static! {
@@ -183,10 +184,7 @@ impl<A: Authenticate> Client<A> {
         Ok(())
     }
 
-    pub async fn retrieve<E: ReadableEntity>(
-        &self,
-        reference: &impl Reference,
-    ) -> Result<E> {
+    pub async fn retrieve<E: ReadableEntity>(&self, reference: &impl Reference) -> Result<E> {
         let token = self.auth.get_valid_token().await?;
         let reference = reference.get_reference();
         let columns = E::get_columns();
@@ -215,10 +213,7 @@ impl<A: Authenticate> Client<A> {
         serde_json::from_slice(content.as_ref()).into_dataverse_result()
     }
 
-    pub async fn retrieve_multiple<E: ReadableEntity>(
-        &self,
-        query: &Query,
-    ) -> Result<Vec<E>> {
+    pub async fn retrieve_multiple<E: ReadableEntity>(&self, query: &Query) -> Result<Vec<E>> {
         let columns = E::get_columns();
         let mut url_path = Some(self.build_query_url(query.logical_name, columns, query));
         let mut entities = Vec::new();
@@ -263,7 +258,10 @@ impl<A: Authenticate> Client<A> {
             .bearer_auth(token)
             .header("OData-MaxVersion", "4.0")
             .header("OData-Version", "4.0")
-            .header("Content-Type", format!("multipart/mixed; boundary=batch_{}", batch.get_batch_id()))
+            .header(
+                "Content-Type",
+                format!("multipart/mixed; boundary=batch_{}", batch.get_batch_id()),
+            )
             .header("Accept", "application/json")
             .body(batch.to_string())
             .send()
