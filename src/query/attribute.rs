@@ -8,8 +8,8 @@ A Dataverse AttributeValue for use in query filters
 
 Please note that this enum is for use in queries only as it is not serializable
 */
+#[derive(Clone, Debug)]
 pub enum Attribute {
-
     /// Indicates a `null` value
     Null,
 

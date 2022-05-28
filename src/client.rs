@@ -70,7 +70,6 @@ pub struct Client<A: Authenticate> {
 }
 
 impl Client<ClientSecretAuth> {
-
     /**
     Creates a dataverse client that uses client/secret authentication
 
@@ -121,7 +120,6 @@ impl Client<ClientSecretAuth> {
 }
 
 impl<A: Authenticate> Client<A> {
-    
     /**
     Creates a dataverse client with a custom authentication handler and backend
 
@@ -190,7 +188,7 @@ impl<A: Authenticate> Client<A> {
     impl Reference for Contact {
         fn get_reference(&self) -> ReferenceStruct {
             ReferenceStruct::new(
-                "contacts", 
+                "contacts",
                 self.contactid,
             )
         }
@@ -269,7 +267,7 @@ impl<A: Authenticate> Client<A> {
     impl Reference for Contact {
         fn get_reference(&self) -> ReferenceStruct {
             ReferenceStruct::new(
-                "contacts", 
+                "contacts",
                 self.contactid,
             )
         }
@@ -337,7 +335,7 @@ impl<A: Authenticate> Client<A> {
     impl Reference for Contact {
         fn get_reference(&self) -> ReferenceStruct {
             ReferenceStruct::new(
-                "contacts", 
+                "contacts",
                 self.contactid,
             )
         }
@@ -387,7 +385,7 @@ impl<A: Authenticate> Client<A> {
     # Examples
     ```rust
     let reference = ReferenceStruct::new(
-        "contacts", 
+        "contacts",
         Uuid::parse_str("12345678-1234-1234-1234-123456789012").unwrap()
     );
 
@@ -439,13 +437,13 @@ impl<A: Authenticate> Client<A> {
     let contact: Contact = client
         .retrieve(
             &ReferenceStruct::new(
-                "contacts", 
+                "contacts",
                 Uuid::parse_str("12345678-1234-1234-1234-123456789012").unwrap()
             )
         )
         .await
         .unwrap();
-    
+
     #[derive(Deserialize)]
     struct Contact {
         contactid: Uuid,
@@ -576,7 +574,7 @@ impl<A: Authenticate> Client<A> {
     So it is possible to create 300 records of an entity with low complexity
     but only 50 records of an entity with high complexity in that timeframe.
 
-    Based on experience a batch size of 50 should be safe for all entities though 
+    Based on experience a batch size of 50 should be safe for all entities though
 
     # Examples
     ```rust
@@ -591,7 +589,7 @@ impl<A: Authenticate> Client<A> {
         firstname: String::from("Marianne"),
         lastname: String::from("McTestface"),
     };
-    
+
     // this batch creates both contacts in one call
     let mut batch = Batch::new("https://instance.crm.dynamics.com/");
     batch.create(&testy_contact).unwrap();
@@ -611,7 +609,7 @@ impl<A: Authenticate> Client<A> {
     impl Reference for Contact {
         fn get_reference(&self) -> ReferenceStruct {
             ReferenceStruct::new(
-                "contacts", 
+                "contacts",
                 self.contactid,
             )
         }

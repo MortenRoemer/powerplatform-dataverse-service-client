@@ -48,6 +48,11 @@ possible querying options.
 
 # Examples
 ```rust
+use powerplatform_dataverse_service_client::{
+    entity::ReadEntity,
+    select::Select
+};
+
 let query = Query::new("contacts")
     .limit(3)
     .filter(Filter::Equal("firstname", AttributeValue::String(String::from("Testy"))))
@@ -71,6 +76,7 @@ impl Select for Contact {
 }
 ```
 */
+#[derive(Clone, Debug)]
 pub struct Query {
     pub logical_name: &'static str,
     pub limit: Option<u32>,
@@ -79,7 +85,6 @@ pub struct Query {
 }
 
 impl Query {
-
     /**
     Creates a new empty query for the given table
 

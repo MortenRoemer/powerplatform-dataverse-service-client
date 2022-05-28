@@ -1,10 +1,10 @@
-use std::{fmt::Display, error::Error};
+use std::{error::Error, fmt::Display};
 
 /**
 The Error that is returned if any of the operations in this crate
 fails.
 */
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DataverseError {
     pub message: String,
 }

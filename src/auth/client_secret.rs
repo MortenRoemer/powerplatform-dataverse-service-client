@@ -28,7 +28,6 @@ pub struct ClientSecretAuth {
 }
 
 impl ClientSecretAuth {
-
     /**
     Creates a new instance for client/secret based authentication
 

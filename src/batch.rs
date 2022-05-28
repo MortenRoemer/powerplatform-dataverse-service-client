@@ -21,7 +21,7 @@ depends on the complexity of the entity in dataverse.
 So it is possible to create 300 records of an entity with low complexity
 but only 50 records of an entity with high complexity in that timeframe.
 
-Based on experience a batch size of 50 should be safe for all entities though 
+Based on experience a batch size of 50 should be safe for all entities though
 
 # Examples
 ```rust
@@ -56,7 +56,7 @@ impl WriteEntity for Contact {}
 impl Reference for Contact {
     fn get_reference(&self) -> ReferenceStruct {
         ReferenceStruct::new(
-            "contacts", 
+            "contacts",
             self.contactid,
         )
     }
@@ -72,7 +72,6 @@ pub struct Batch {
 }
 
 impl Batch {
-
     /// Creates a new empty batch with its own batch id and dataset id
     pub fn new(url: &'static str) -> Self {
         Self {

@@ -1,3 +1,6 @@
+use std::fmt::Display;
+
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /**
@@ -11,20 +14,29 @@ pub trait Reference {
 /**
 default implementation for the `Reference` trait
 */
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReferenceStruct {
     pub entity_name: &'static str,
     pub entity_id: Uuid,
 }
 
 impl ReferenceStruct {
-
     /// creates a new Reference struct
     pub fn new(entity_name: &'static str, entity_id: Uuid) -> Self {
         Self {
             entity_name,
             entity_id,
         }
+    }
+}
+
+impl Display for ReferenceStruct {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!(
+            "{}:({})",
+            self.entity_name,
+            self.entity_id.as_simple()
+        ))
     }
 }
 

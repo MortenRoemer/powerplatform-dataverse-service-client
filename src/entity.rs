@@ -1,4 +1,4 @@
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 
 use crate::{reference::Reference, select::Select};
 
@@ -55,7 +55,7 @@ impl WriteEntity for Contact {}
 impl Reference for Contact {
     fn get_reference(&self) -> ReferenceStruct {
         ReferenceStruct::new(
-            "contacts", 
+            "contacts",
             self.contactid,
         )
     }

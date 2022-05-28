@@ -28,7 +28,6 @@ see `get_valid_token(...)` for more details
 */
 #[async_trait]
 pub trait Authenticate {
-
     /**
     Authenticates the current instance and returns the Bearer token to use
     in subsequent Microsoft Dataverse calls

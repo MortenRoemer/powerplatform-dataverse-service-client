@@ -2,10 +2,6 @@ use std::fmt::Display;
 
 use crate::error::DataverseError;
 
-pub struct ResultCollection<E> {
-    pub entities: Vec<Result<E>>,
-}
-
 pub type Result<T> = std::result::Result<T, DataverseError>;
 
 pub trait IntoDataverseResult<T> {

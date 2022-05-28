@@ -8,12 +8,14 @@ These can be combined in those queries to build more complex orderings
 # Examples
 Using `Order` statements is as simple as this:
 ```rust
+use powerplatform_dataverse_service_client::query::{order::Order, Query};
+
 let query = Query::new("contacts")
     .order(vec![Order::Ascending("lastname")]);
 ```
 */
+#[derive(Clone, Debug)]
 pub enum Order {
-
     /// Indicates an ascending order
     Ascending(&'static str),
 

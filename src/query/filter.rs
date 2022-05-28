@@ -10,13 +10,15 @@ filter expressions
 
 # Examples
 ```rust
+use powerplatform_dataverse_service_client::query::{attribute::Attribute, filter::Filter};
+
 // example filter for attributes "firstname" and "lastname"
-let filter = Filter::Equal("firstname", AttributeValue::String(String::from("Testy")))
-    .and(Filter::EndsWith("lastname", AttributeValue::String(String::from("face"))))
+let filter = Filter::Equal("firstname", Attribute::String(String::from("Testy")))
+    .and(Filter::EndsWith("lastname", Attribute::String(String::from("face"))));
 ```
 */
+#[derive(Clone, Debug)]
 pub enum Filter {
-
     /// Indicates an equal `==` expression
     Equal(&'static str, Attribute),
 
@@ -55,7 +57,6 @@ pub enum Filter {
 }
 
 impl Filter {
-
     /// Logically combines this filter and the given filter with an `&` expression
     pub fn and(self, other: Filter) -> Self {
         Filter::And(Box::new(self), Box::new(other))
