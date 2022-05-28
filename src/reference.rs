@@ -1,9 +1,16 @@
 use uuid::Uuid;
 
+/**
+trait for getting a reference to an entity record from a struct
+*/
 pub trait Reference {
+    /// creates a Reference structure for association purposes in Microsoft Dataverse
     fn get_reference(&self) -> ReferenceStruct;
 }
 
+/**
+default implementation for the `Reference` trait
+*/
 #[derive(Copy, Clone)]
 pub struct ReferenceStruct {
     pub entity_name: &'static str,
@@ -11,6 +18,8 @@ pub struct ReferenceStruct {
 }
 
 impl ReferenceStruct {
+
+    /// creates a new Reference struct
     pub fn new(entity_name: &'static str, entity_id: Uuid) -> Self {
         Self {
             entity_name,

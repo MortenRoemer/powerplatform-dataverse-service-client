@@ -14,6 +14,12 @@ use crate::{
     result::{IntoDataverseResult, Result},
 };
 
+/**
+Implements the `Authenticate` trait by using OAuth client/secret authentication
+
+It is unlikely you need to use this struct directly. just use the
+`Client::with_client_secret_auth(...)` function instead
+*/
 pub struct ClientSecretAuth {
     http_client: reqwest::Client,
     login_url: String,
@@ -22,6 +28,13 @@ pub struct ClientSecretAuth {
 }
 
 impl ClientSecretAuth {
+
+    /**
+    Creates a new instance for client/secret based authentication
+
+    It is unlikely you need to use this function directly. just use the
+    `Client::with_client_secret_auth(...)` function instead
+    */
     pub fn new(
         http_client: reqwest::Client,
         login_url: String,

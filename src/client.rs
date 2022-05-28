@@ -28,7 +28,7 @@ use uuid::Uuid;
 use crate::{
     auth::{client_secret::ClientSecretAuth, Authenticate},
     batch::Batch,
-    entity::{ReadableEntity, WritableEntity},
+    entity::{ReadEntity, WriteEntity},
     error::DataverseError,
     query::Query,
     reference::Reference,
@@ -185,7 +185,7 @@ impl<A: Authenticate> Client<A> {
         lastname: String,
     }
 
-    impl WritableEntity for Contact {}
+    impl WriteEntity for Contact {}
 
     impl Reference for Contact {
         fn get_reference(&self) -> ReferenceStruct {
@@ -197,7 +197,7 @@ impl<A: Authenticate> Client<A> {
     }
     ```
     */
-    pub async fn create(&self, entity: &impl WritableEntity) -> Result<Uuid> {
+    pub async fn create(&self, entity: &impl WriteEntity) -> Result<Uuid> {
         let token = self.auth.get_valid_token().await?;
         let reference = entity.get_reference();
         let url_path = self.build_simple_url(reference.entity_name);
@@ -264,7 +264,7 @@ impl<A: Authenticate> Client<A> {
         lastname: String,
     }
 
-    impl WritableEntity for Contact {}
+    impl WriteEntity for Contact {}
 
     impl Reference for Contact {
         fn get_reference(&self) -> ReferenceStruct {
@@ -275,7 +275,7 @@ impl<A: Authenticate> Client<A> {
         }
     }
     */
-    pub async fn update(&self, entity: &impl WritableEntity) -> Result<()> {
+    pub async fn update(&self, entity: &impl WriteEntity) -> Result<()> {
         let token = self.auth.get_valid_token().await?;
         let reference = entity.get_reference();
         let url_path = self.build_targeted_url(reference.entity_name, reference.entity_id);
@@ -332,7 +332,7 @@ impl<A: Authenticate> Client<A> {
         lastname: String,
     }
 
-    impl WritableEntity for Contact {}
+    impl WriteEntity for Contact {}
 
     impl Reference for Contact {
         fn get_reference(&self) -> ReferenceStruct {
@@ -343,7 +343,7 @@ impl<A: Authenticate> Client<A> {
         }
     }
     */
-    pub async fn upsert(&self, entity: &impl WritableEntity) -> Result<()> {
+    pub async fn upsert(&self, entity: &impl WriteEntity) -> Result<()> {
         let token = self.auth.get_valid_token().await?;
         let reference = entity.get_reference();
         let url_path = self.build_targeted_url(reference.entity_name, reference.entity_id);
@@ -371,6 +371,29 @@ impl<A: Authenticate> Client<A> {
         Ok(())
     }
 
+    /**
+    Deletes the entity record this reference points to
+
+    Please note that each structs that implements `WriteEntity` also implements
+    `Reference` so you can use it as input here, but there is a sensible default implementation
+    called `ReferenceStruct` for those cases where you only have access to the raw
+    reference data
+
+    This may fail for any of these reasons
+    - An authentication failure
+    - Any http client or server error
+    - The referenced entity record doesn't exist
+
+    # Examples
+    ```rust
+    let reference = ReferenceStruct::new(
+        "contacts", 
+        Uuid::parse_str("12345678-1234-1234-1234-123456789012").unwrap()
+    );
+
+    client.delete(&reference).unwrap();
+    ```
+    */
     pub async fn delete(&self, reference: &impl Reference) -> Result<()> {
         let token = self.auth.get_valid_token().await?;
         let reference = reference.get_reference();
@@ -397,7 +420,49 @@ impl<A: Authenticate> Client<A> {
         Ok(())
     }
 
-    pub async fn retrieve<E: ReadableEntity>(&self, reference: &impl Reference) -> Result<E> {
+    /**
+    retrieves the entity record that the reference points to from dataverse
+
+    This function uses the implementation of the `Select` trait to only retrieve
+    those attributes relevant to the struct defined. It is an Anti-Pattern to
+    retrieve all attributes when they are not needed, so this library does not
+    give the option to do that
+
+    This may fail for any of these reasons
+    - An authentication failure
+    - A serde deserialization error
+    - Any http client or server error
+    - The entity record referenced doesn't exist
+
+    # Examples
+    ```rust
+    let contact: Contact = client
+        .retrieve(
+            &ReferenceStruct::new(
+                "contacts", 
+                Uuid::parse_str("12345678-1234-1234-1234-123456789012").unwrap()
+            )
+        )
+        .await
+        .unwrap();
+    
+    #[derive(Deserialize)]
+    struct Contact {
+        contactid: Uuid,
+        firstname: String,
+        lastname: String,
+    }
+
+    impl ReadEntity for Contact {}
+
+    impl Select for Contact {
+        fn get_columns() -> &'static [&'static str] {
+            &["contactid", "firstname", "lastname"]
+        }
+    }
+    ```
+    */
+    pub async fn retrieve<E: ReadEntity>(&self, reference: &impl Reference) -> Result<E> {
         let token = self.auth.get_valid_token().await?;
         let reference = reference.get_reference();
         let columns = E::get_columns();
@@ -426,7 +491,45 @@ impl<A: Authenticate> Client<A> {
         serde_json::from_slice(content.as_ref()).into_dataverse_result()
     }
 
-    pub async fn retrieve_multiple<E: ReadableEntity>(&self, query: &Query) -> Result<Vec<E>> {
+    /**
+    Executes the query and retrieves the entities from dataverse
+
+    This function uses the implementation of the `Select` trait to only retrieve
+    those attributes relevant to the struct defined. It is an Anti-Pattern to
+    retrieve all attributes when they are not needed, so this library does not
+    give the option to do that
+
+    Please note that if you don't specify a limit then the client will try to retrieve
+    all matching records. This can take a lot of time.
+
+    This may fail for any of these reasons
+    - An authentication failure
+    - A serde deserialization error
+    - Any http client or server error
+
+    # Examples
+    ```rust
+    // this query retrieves the first 3 contacts
+    let query = Query::new("contacts").limit(3);
+    let contacts = client.retrieve_multiple(&query).unwrap();
+
+    #[derive(Deserialize)]
+    struct Contact {
+        contactid: Uuid,
+        firstname: String,
+        lastname: String,
+    }
+
+    impl ReadEntity for Contact {}
+
+    impl Select for Contact {
+        fn get_columns() -> &'static [&'static str] {
+            &["contactid", "firstname", "lastname"]
+        }
+    }
+    ```
+    */
+    pub async fn retrieve_multiple<E: ReadEntity>(&self, query: &Query) -> Result<Vec<E>> {
         let columns = E::get_columns();
         let mut url_path = Some(self.build_query_url(query.logical_name, columns, query));
         let mut entities = Vec::new();
@@ -461,6 +564,60 @@ impl<A: Authenticate> Client<A> {
         Ok(entities)
     }
 
+    /**
+    executes the batch against the dataverse environment
+
+    This function will fail if:
+    - the batch size exceeds 1000 calls
+    - the batch execution time exceeds 2 minutes
+
+    the second restriction is especially tricky to handle because the execution time
+    depends on the complexity of the entity in dataverse.
+    So it is possible to create 300 records of an entity with low complexity
+    but only 50 records of an entity with high complexity in that timeframe.
+
+    Based on experience a batch size of 50 should be safe for all entities though 
+
+    # Examples
+    ```rust
+    let testy_contact = Contact {
+        contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789012").unwrap(),
+        firstname: String::from("Testy"),
+        lastname: String::from("McTestface"),
+    };
+
+    let marianne_contact = Contact {
+        contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789abc").unwrap(),
+        firstname: String::from("Marianne"),
+        lastname: String::from("McTestface"),
+    };
+    
+    // this batch creates both contacts in one call
+    let mut batch = Batch::new("https://instance.crm.dynamics.com/");
+    batch.create(&testy_contact).unwrap();
+    batch.create(&marianne_contact).unwrap();
+
+    client.execute(&batch).unwrap();
+
+    #[derive(Serialize)]
+    struct Contact {
+        contactid: Uuid,
+        firstname: String,
+        lastname: String,
+    }
+
+    impl WriteEntity for Contact {}
+
+    impl Reference for Contact {
+        fn get_reference(&self) -> ReferenceStruct {
+            ReferenceStruct::new(
+                "contacts", 
+                self.contactid,
+            )
+        }
+    }
+    ```
+    */
     pub async fn execute(&self, batch: &Batch) -> Result<()> {
         let token = self.auth.get_valid_token().await?;
         let url_path = self.build_simple_url("$batch");

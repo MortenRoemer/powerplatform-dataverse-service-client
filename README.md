@@ -43,7 +43,7 @@ struct Contact {
     lastname: String,
 }
 
-impl ReadableEntity for Contact {}
+impl ReadEntity for Contact {}
 
 impl Select for Contact {
     fn get_columns() -> &'static [&'static str] {
@@ -80,7 +80,7 @@ struct Contact {
     lastname: String,
 }
 
-impl WritableEntity for Contact {}
+impl WriteEntity for Contact {}
 
 impl Reference for Contact {
     fn get_reference(&self) -> ReferenceStruct {

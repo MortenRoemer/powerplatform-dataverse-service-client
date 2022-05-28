@@ -1,3 +1,36 @@
+/*!
+Module for defining Microsoft Dataverse queries for use in `Client::retrieve_multiple(...)`
+
+These queries are modeled after the ODATAv4 specifications used by Microsoft Dataverse.
+This section is prone to change as these specifications allow for a wide array of
+possible querying options.
+
+# Examples
+```rust
+let query = Query::new("contacts")
+    .limit(3)
+    .filter(Filter::Equal("firstname", AttributeValue::String(String::from("Testy"))))
+    .order(vec![Order::Ascending("lastname")]);
+
+let contacts = client.retrieve_multiple(&query).unwrap();
+
+#[derive(Deserialize)]
+struct Contact {
+    contactid: Uuid,
+    firstname: String,
+    lastname: String,
+}
+
+impl ReadEntity for Contact {}
+
+impl Select for Contact {
+    fn get_columns() -> &'static [&'static str] {
+        &["contactid", "firstname", "lastname"]
+    }
+}
+```
+*/
+
 use std::fmt::Display;
 
 use self::{filter::Filter, order::Order};
@@ -6,6 +39,38 @@ pub mod attribute;
 pub mod filter;
 pub mod order;
 
+/**
+Represents a Microsoft Dataverse query
+
+These queries are modeled after the ODATAv4 specifications used by Microsoft Dataverse.
+This section is prone to change as these specifications allow for a wide array of
+possible querying options.
+
+# Examples
+```rust
+let query = Query::new("contacts")
+    .limit(3)
+    .filter(Filter::Equal("firstname", AttributeValue::String(String::from("Testy"))))
+    .order(vec![Order::Ascending("lastname")]);
+
+let contacts = client.retrieve_multiple(&query).unwrap();
+
+#[derive(Deserialize)]
+struct Contact {
+    contactid: Uuid,
+    firstname: String,
+    lastname: String,
+}
+
+impl ReadEntity for Contact {}
+
+impl Select for Contact {
+    fn get_columns() -> &'static [&'static str] {
+        &["contactid", "firstname", "lastname"]
+    }
+}
+```
+*/
 pub struct Query {
     pub logical_name: &'static str,
     pub limit: Option<u32>,
@@ -14,6 +79,16 @@ pub struct Query {
 }
 
 impl Query {
+
+    /**
+    Creates a new empty query for the given table
+
+    Please note that though it is possible to execute this empty query directly,
+    this will attempt to retrieve every single entity record from the table.
+
+    Use the `limit(...)` and `filter(...)` functions to add a limiting factor to your query
+    of you don't want this
+    */
     pub fn new(logical_name: &'static str) -> Self {
         Self {
             logical_name,
@@ -21,6 +96,25 @@ impl Query {
             filter: None,
             order: None,
         }
+    }
+
+    /// limits the query result to at most `n` entities
+    pub fn limit(mut self, count: u32) -> Self {
+        self.limit = Some(count);
+        self
+    }
+
+    /// filters the query result to records that match the predicate defined
+    /// in the given filter
+    pub fn filter(mut self, filter: Filter) -> Self {
+        self.filter = Some(filter);
+        self
+    }
+
+    /// orders the query result by the given attributes and directions
+    pub fn order(mut self, order: Vec<Order>) -> Self {
+        self.order = Some(order);
+        self
     }
 }
 

@@ -1,7 +1,23 @@
 use std::fmt::Display;
 
+/**
+Represents a single ordering statement used in `Query` Structures
+
+These can be combined in those queries to build more complex orderings
+
+# Examples
+Using `Order` statements is as simple as this:
+```rust
+let query = Query::new("contacts")
+    .order(vec![Order::Ascending("lastname")]);
+```
+*/
 pub enum Order {
+
+    /// Indicates an ascending order
     Ascending(&'static str),
+
+    /// Indicates a descending order
     Descending(&'static str),
 }
 
