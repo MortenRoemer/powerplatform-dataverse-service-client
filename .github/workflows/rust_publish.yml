@@ -25,4 +25,4 @@ jobs:
     - name: Run tests
       run: cargo test
     - name: Publish to crates.io
-      run: cargo publish
+      run: cargo publish --token $CRATES_IO_TOKEN
