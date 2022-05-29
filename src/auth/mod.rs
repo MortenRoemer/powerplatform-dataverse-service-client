@@ -19,6 +19,7 @@ use async_trait::async_trait;
 use crate::result::Result;
 
 pub mod client_secret;
+pub mod no_auth;
 
 /**
 trait for methods that result in the acquisition of tokens usable

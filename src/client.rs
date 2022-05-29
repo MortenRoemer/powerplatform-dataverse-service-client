@@ -6,6 +6,8 @@ You can create a client with the functions provided by this module.
 
 # Examples
 ```rust
+use powerplatform_dataverse_service_client::client::Client;
+
 let client_id = String::from("<clientid>");
 let client_secret = String::from("<clientsecret>");
 
@@ -26,7 +28,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
-    auth::{client_secret::ClientSecretAuth, Authenticate},
+    auth::{client_secret::ClientSecretAuth, Authenticate, no_auth::NoAuth},
     batch::Batch,
     entity::{ReadEntity, WriteEntity},
     error::DataverseError,
@@ -43,7 +45,6 @@ lazy_static! {
 
 /// Microsoft Dataverse Web-API Version this client uses
 pub static VERSION: &str = "9.2";
-
 /**
 A client capable of connecting to a dataverse environment
 
@@ -52,6 +53,8 @@ connection-pooling.
 
 # Examples
 ```rust
+use powerplatform_dataverse_service_client::client::Client;
+
 let client_id = String::from("<clientid>");
 let client_secret = String::from("<clientsecret>");
 
@@ -80,6 +83,8 @@ impl Client<ClientSecretAuth> {
 
     # Examples
     ```rust
+    use powerplatform_dataverse_service_client::client::Client;
+
     let client_id = String::from("<clientid>");
     let client_secret = String::from("<clientsecret>");
 
@@ -119,6 +124,26 @@ impl Client<ClientSecretAuth> {
     }
 }
 
+impl Client<NoAuth> {
+    /**
+    Creates a dummy Client that will return errors every time its functions are used
+
+    This is only really useful in unit-testing and doc-testing scenarios where you
+    want to prevent a bunch of erronous auth-calls each time a test is run
+    */
+    pub fn new_dummy() -> Self {
+        let client = reqwest::Client::builder()
+            .https_only(true)
+            .connect_timeout(Duration::from_secs(120))
+            .timeout(Duration::from_secs(120))
+            .build()
+            .unwrap();
+
+        let auth = NoAuth {};
+        Client::new("", client, auth)
+    }
+}
+
 impl<A: Authenticate> Client<A> {
     /**
     Creates a dataverse client with a custom authentication handler and backend
@@ -132,12 +157,22 @@ impl<A: Authenticate> Client<A> {
 
     # Examples
     ```rust
+    use core::time::Duration;
+    use powerplatform_dataverse_service_client::auth::client_secret::ClientSecretAuth;
+    use powerplatform_dataverse_service_client::client::Client;
+    use powerplatform_dataverse_service_client::result::{IntoDataverseResult, Result};
+
+    # fn main() -> Result<()> {
+    let tenant_id = "12345678-1234-1234-1234-123456789012";
+    let client_id = String::from("<some client id>");
+    let client_secret = String::from("<some client secret>");
+    let url = "https://instance.crm.dynamics.crm/";
+
     let client = reqwest::Client::builder()
         .https_only(true)
         .connect_timeout(Duration::from_secs(120))
         .timeout(Duration::from_secs(120))
-        .build()
-        .unwrap();
+        .build().into_dataverse_result()?;
 
     let auth = ClientSecretAuth::new(
         client.clone(),
@@ -150,7 +185,9 @@ impl<A: Authenticate> Client<A> {
         client_secret,
     );
 
-    Client::new(url, client, auth)
+    let client = Client::new(url, client, auth);
+    # Ok(())
+    # }
     ```
     */
     pub fn new(url: &'static str, backend: reqwest::Client, auth: A) -> Self {
@@ -168,13 +205,23 @@ impl<A: Authenticate> Client<A> {
 
     # Examples
     ```rust
-    let contact = Contact {
-        contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789012").unwrap(),
-        firstname: String::from("Testy"),
-        lastname: String::from("McTestface"),
-    };
+    use uuid::Uuid;
+    use serde::Serialize;
+    use powerplatform_dataverse_service_client::client::Client;
+    use powerplatform_dataverse_service_client::entity::WriteEntity;
+    use powerplatform_dataverse_service_client::reference::{Reference, ReferenceStruct};
+    use powerplatform_dataverse_service_client::result::{IntoDataverseResult, Result};
 
-    client.create(&contact).await.unwrap();
+    async fn test() -> Result<Uuid> {
+        let contact = Contact {
+            contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789012").into_dataverse_result()?,
+            firstname: String::from("Testy"),
+            lastname: String::from("McTestface"),
+        };
+
+        let client = Client::new_dummy(); // Please replace this with your preferred authentication method
+        client.create(&contact).await
+    }
 
     #[derive(Serialize)]
     struct Contact {
@@ -247,13 +294,23 @@ impl<A: Authenticate> Client<A> {
 
     # Examples
     ```rust
-    let contact = Contact {
-        contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789012").unwrap(),
-        firstname: String::from("Testy"),
-        lastname: String::from("McTestface"),
-    };
+    use uuid::Uuid;
+    use serde::Serialize;
+    use powerplatform_dataverse_service_client::client::Client;
+    use powerplatform_dataverse_service_client::entity::WriteEntity;
+    use powerplatform_dataverse_service_client::reference::{Reference, ReferenceStruct};
+    use powerplatform_dataverse_service_client::result::{IntoDataverseResult, Result};
 
-    client.update(&contact).await.unwrap();
+    async fn test() -> Result<()> {
+        let contact = Contact {
+            contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789012").into_dataverse_result()?,
+            firstname: String::from("Testy"),
+            lastname: String::from("McTestface"),
+        };
+
+        let client = Client::new_dummy(); // Please replace this with your preferred authentication method
+        client.update(&contact).await
+    }
 
     #[derive(Serialize)]
     struct Contact {
@@ -272,6 +329,7 @@ impl<A: Authenticate> Client<A> {
             )
         }
     }
+    ```
     */
     pub async fn update(&self, entity: &impl WriteEntity) -> Result<()> {
         let token = self.auth.get_valid_token().await?;
@@ -315,13 +373,23 @@ impl<A: Authenticate> Client<A> {
 
     # Examples
     ```rust
-    let contact = Contact {
-        contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789012").unwrap(),
-        firstname: String::from("Testy"),
-        lastname: String::from("McTestface"),
-    };
+    use uuid::Uuid;
+    use serde::Serialize;
+    use powerplatform_dataverse_service_client::client::Client;
+    use powerplatform_dataverse_service_client::entity::WriteEntity;
+    use powerplatform_dataverse_service_client::reference::{Reference, ReferenceStruct};
+    use powerplatform_dataverse_service_client::result::{IntoDataverseResult, Result};
 
-    client.upsert(&contact).await.unwrap();
+    async fn test() -> Result<()> {
+        let contact = Contact {
+            contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789012").into_dataverse_result()?,
+            firstname: String::from("Testy"),
+            lastname: String::from("McTestface"),
+        };
+
+        let client = Client::new_dummy(); // Please replace this with your preferred authentication method
+        client.upsert(&contact).await
+    }
 
     #[derive(Serialize)]
     struct Contact {
@@ -340,6 +408,7 @@ impl<A: Authenticate> Client<A> {
             )
         }
     }
+    ```
     */
     pub async fn upsert(&self, entity: &impl WriteEntity) -> Result<()> {
         let token = self.auth.get_valid_token().await?;
@@ -384,12 +453,21 @@ impl<A: Authenticate> Client<A> {
 
     # Examples
     ```rust
+    use uuid::Uuid;
+    use powerplatform_dataverse_service_client::client::Client;
+    use powerplatform_dataverse_service_client::reference::ReferenceStruct;
+    use powerplatform_dataverse_service_client::result::{IntoDataverseResult, Result};
+
+    # async fn test() -> Result<()> {
     let reference = ReferenceStruct::new(
         "contacts",
-        Uuid::parse_str("12345678-1234-1234-1234-123456789012").unwrap()
+        Uuid::parse_str("12345678-1234-1234-1234-123456789012").into_dataverse_result()?
     );
 
-    client.delete(&reference).unwrap();
+    let client = Client::new_dummy(); // Please replace this with your preferred authentication method
+    client.delete(&reference).await?;
+    # Ok(())
+    # }
     ```
     */
     pub async fn delete(&self, reference: &impl Reference) -> Result<()> {
@@ -434,15 +512,26 @@ impl<A: Authenticate> Client<A> {
 
     # Examples
     ```rust
-    let contact: Contact = client
-        .retrieve(
-            &ReferenceStruct::new(
-                "contacts",
-                Uuid::parse_str("12345678-1234-1234-1234-123456789012").unwrap()
+    use serde::Deserialize;
+    use uuid::Uuid;
+    use powerplatform_dataverse_service_client::client::Client;
+    use powerplatform_dataverse_service_client::entity::ReadEntity;
+    use powerplatform_dataverse_service_client::reference::ReferenceStruct;
+    use powerplatform_dataverse_service_client::result::{IntoDataverseResult, Result};
+    use powerplatform_dataverse_service_client::select::Select;
+    
+    async fn test() -> Result<()> {
+        let client = Client::new_dummy(); // Please replace this with your preferred authentication method
+        let contact: Contact = client
+            .retrieve(
+                &ReferenceStruct::new(
+                    "contacts",
+                    Uuid::parse_str("12345678-1234-1234-1234-123456789012").into_dataverse_result()?
+                )
             )
-        )
-        .await
-        .unwrap();
+            .await?;
+        Ok(())
+    }
 
     #[derive(Deserialize)]
     struct Contact {
@@ -507,9 +596,24 @@ impl<A: Authenticate> Client<A> {
 
     # Examples
     ```rust
-    // this query retrieves the first 3 contacts
-    let query = Query::new("contacts").limit(3);
-    let contacts = client.retrieve_multiple(&query).unwrap();
+    use uuid::Uuid;
+    use serde::Deserialize;
+    use powerplatform_dataverse_service_client::{
+        client::Client,
+        entity::ReadEntity,
+        reference::ReferenceStruct,
+        result::{IntoDataverseResult, Result},
+        select::Select,
+        query::Query
+    };
+
+    async fn test() -> Result<()> {
+        // this query retrieves the first 3 contacts
+        let query = Query::new("contacts").limit(3);
+        let client = Client::new_dummy(); // Please replace this with your preferred authentication method
+        let contacts: Vec<Contact> = client.retrieve_multiple(&query).await?;
+        Ok(())
+    }
 
     #[derive(Deserialize)]
     struct Contact {
@@ -578,24 +682,37 @@ impl<A: Authenticate> Client<A> {
 
     # Examples
     ```rust
-    let testy_contact = Contact {
-        contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789012").unwrap(),
-        firstname: String::from("Testy"),
-        lastname: String::from("McTestface"),
+    use uuid::Uuid;
+    use serde::Serialize;
+    use powerplatform_dataverse_service_client::{
+        batch::Batch,
+        client::Client,
+        entity::WriteEntity,
+        reference::{Reference, ReferenceStruct},
+        result::{IntoDataverseResult, Result}
     };
 
-    let marianne_contact = Contact {
-        contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789abc").unwrap(),
-        firstname: String::from("Marianne"),
-        lastname: String::from("McTestface"),
-    };
+    async fn test() -> Result<()> {
+        let testy_contact = Contact {
+            contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789012").into_dataverse_result()?,
+            firstname: String::from("Testy"),
+            lastname: String::from("McTestface"),
+        };
 
-    // this batch creates both contacts in one call
-    let mut batch = Batch::new("https://instance.crm.dynamics.com/");
-    batch.create(&testy_contact).unwrap();
-    batch.create(&marianne_contact).unwrap();
+        let marianne_contact = Contact {
+            contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789abc").into_dataverse_result()?,
+            firstname: String::from("Marianne"),
+            lastname: String::from("McTestface"),
+        };
 
-    client.execute(&batch).unwrap();
+        // this batch creates both contacts in one call
+        let mut batch = Batch::new("https://instance.crm.dynamics.com/");
+        batch.create(&testy_contact)?;
+        batch.create(&marianne_contact)?;
+        let client = Client::new_dummy(); // Please replace this with your preferred authentication method
+        client.execute(&batch).await?;
+        Ok(())
+    }
 
     #[derive(Serialize)]
     struct Contact {
