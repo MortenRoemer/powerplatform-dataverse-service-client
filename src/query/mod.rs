@@ -7,12 +7,31 @@ possible querying options.
 
 # Examples
 ```rust
-let query = Query::new("contacts")
-    .limit(3)
-    .filter(Filter::Equal("firstname", AttributeValue::String(String::from("Testy"))))
-    .order(vec![Order::Ascending("lastname")]);
+use uuid::Uuid;
+use serde::Deserialize;
+use powerplatform_dataverse_service_client::{
+    client::Client,
+    entity::ReadEntity,
+    result::Result,
+    select::Select,
+    query::{
+        attribute::Attribute,
+        filter::Filter,
+        order::Order,
+        Query
+    }
+};
 
-let contacts = client.retrieve_multiple(&query).unwrap();
+async fn test() -> Result<()> {
+    let query = Query::new("contacts")
+        .limit(3)
+        .filter(Filter::Equal("firstname", Attribute::String(String::from("Testy"))))
+        .order(vec![Order::Ascending("lastname")]);
+
+    let client = Client::new_dummy();
+    let contacts: Vec<Contact> = client.retrieve_multiple(&query).await?;
+    Ok(())
+}
 
 #[derive(Deserialize)]
 struct Contact {
@@ -48,17 +67,31 @@ possible querying options.
 
 # Examples
 ```rust
+use uuid::Uuid;
+use serde::Deserialize;
 use powerplatform_dataverse_service_client::{
+    client::Client,
     entity::ReadEntity,
-    select::Select
+    result::Result,
+    select::Select,
+    query::{
+        attribute::Attribute,
+        filter::Filter,
+        order::Order,
+        Query
+    }
 };
 
-let query = Query::new("contacts")
-    .limit(3)
-    .filter(Filter::Equal("firstname", AttributeValue::String(String::from("Testy"))))
-    .order(vec![Order::Ascending("lastname")]);
+async fn test() -> Result<()> {
+    let query = Query::new("contacts")
+        .limit(3)
+        .filter(Filter::Equal("firstname", Attribute::String(String::from("Testy"))))
+        .order(vec![Order::Ascending("lastname")]);
 
-let contacts = client.retrieve_multiple(&query).unwrap();
+    let client = Client::new_dummy();
+    let contacts: Vec<Contact> = client.retrieve_multiple(&query).await?;
+    Ok(())
+}
 
 #[derive(Deserialize)]
 struct Contact {

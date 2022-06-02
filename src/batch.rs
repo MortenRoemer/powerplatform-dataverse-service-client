@@ -25,24 +25,38 @@ Based on experience a batch size of 50 should be safe for all entities though
 
 # Examples
 ```rust
-let testy_contact = Contact {
-    contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789012").unwrap(),
-    firstname: String::from("Testy"),
-    lastname: String::from("McTestface"),
+use uuid::Uuid;
+use serde::Serialize;
+use powerplatform_dataverse_service_client::{
+    batch::Batch,
+    client::Client,
+    entity::WriteEntity,
+    reference::{Reference, ReferenceStruct},
+    result::{Result, IntoDataverseResult}
 };
 
-let marianne_contact = Contact {
-    contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789abc").unwrap(),
-    firstname: String::from("Marianne"),
-    lastname: String::from("McTestface"),
-};
+async fn test() -> Result<()> {
+    let testy_contact = Contact {
+        contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789012").into_dataverse_result()?,
+        firstname: String::from("Testy"),
+        lastname: String::from("McTestface"),
+    };
 
-// this batch creates both contacts in one call
-let mut batch = Batch::new("https://instance.crm.dynamics.com/");
-batch.create(&testy_contact).unwrap();
-batch.create(&marianne_contact).unwrap();
+    let marianne_contact = Contact {
+        contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789abc").into_dataverse_result()?,
+        firstname: String::from("Marianne"),
+        lastname: String::from("McTestface"),
+    };
 
-client.execute(&batch).unwrap();
+    // this batch creates both contacts in one call
+    let mut batch = Batch::new("https://instance.crm.dynamics.com/");
+    batch.create(&testy_contact)?;
+    batch.create(&marianne_contact)?;
+
+    let client = Client::new_dummy(); // Please replace this with your preferred authentication method
+    client.execute(&batch).await?;
+    Ok(())
+}
 
 #[derive(Serialize)]
 struct Contact {
@@ -97,17 +111,17 @@ impl Batch {
         self.next_content_id = 1;
     }
 
-    /// returns the current batch id (This can change after a call to `reset()` though)
+    /// returns the current batch id (This will change after a call to `reset()`)
     pub fn get_batch_id(&self) -> Uuid {
         self.batch_id
     }
 
-    /// returns the current dataset id (This can change after a call to `reset()` though)
+    /// returns the current dataset id (This will change after a call to `reset()`)
     pub fn get_dataset_id(&self) -> Uuid {
         self.dataset_id
     }
 
-    /// returns the current count auf requests in this batch
+    /// returns the current count of requests in this batch
     pub fn get_count(&self) -> u16 {
         self.next_content_id - 1
     }
@@ -119,23 +133,56 @@ impl Batch {
 
     # Examples
     ```rust
-    let testy_contact = Contact {
-        contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789012").unwrap(),
-        firstname: String::from("Testy"),
-        lastname: String::from("McTestface"),
+    use uuid::Uuid;
+    use serde::Serialize;
+    use powerplatform_dataverse_service_client::{
+        batch::Batch,
+        client::Client,
+        entity::WriteEntity,
+        reference::{Reference, ReferenceStruct},
+        result::{Result, IntoDataverseResult}
     };
 
-    let marianne_contact = Contact {
-        contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789abc").unwrap(),
-        firstname: String::from("Marianne"),
-        lastname: String::from("McTestface"),
-    };
+    async fn test() -> Result<()> {
+        let testy_contact = Contact {
+            contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789012").into_dataverse_result()?,
+            firstname: String::from("Testy"),
+            lastname: String::from("McTestface"),
+        };
 
-    // this batch creates both contacts in one call
-    let mut batch = Batch::new("https://instance.crm.dynamics.com/");
-    batch.create(&testy_contact).unwrap();
-    batch.create(&marianne_contact).unwrap();
+        let marianne_contact = Contact {
+            contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789abc").into_dataverse_result()?,
+            firstname: String::from("Marianne"),
+            lastname: String::from("McTestface"),
+        };
 
+        // this batch creates both contacts in one call
+        let mut batch = Batch::new("https://instance.crm.dynamics.com/");
+        batch.create(&testy_contact)?;
+        batch.create(&marianne_contact)?;
+
+        let client = Client::new_dummy(); // Please replace this with your preferred authentication method
+        client.execute(&batch).await?;
+        Ok(())
+    }
+
+    #[derive(Serialize)]
+    struct Contact {
+        contactid: Uuid,
+        firstname: String,
+        lastname: String,
+    }
+
+    impl WriteEntity for Contact {}
+
+    impl Reference for Contact {
+        fn get_reference(&self) -> ReferenceStruct {
+            ReferenceStruct::new(
+                "contacts",
+                self.contactid,
+            )
+        }
+    }
     ```
     */
     pub fn create(&mut self, entity: &impl WriteEntity) -> Result<()> {
@@ -164,23 +211,56 @@ impl Batch {
 
     # Examples
     ```rust
-    let testy_contact = Contact {
-        contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789012").unwrap(),
-        firstname: String::from("Testy"),
-        lastname: String::from("McTestface"),
+    use uuid::Uuid;
+    use serde::Serialize;
+    use powerplatform_dataverse_service_client::{
+        batch::Batch,
+        client::Client,
+        entity::WriteEntity,
+        reference::{Reference, ReferenceStruct},
+        result::{Result, IntoDataverseResult}
     };
 
-    let marianne_contact = Contact {
-        contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789abc").unwrap(),
-        firstname: String::from("Marianne"),
-        lastname: String::from("McTestface"),
-    };
+    async fn test() -> Result<()> {
+        let testy_contact = Contact {
+            contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789012").into_dataverse_result()?,
+            firstname: String::from("Testy"),
+            lastname: String::from("McTestface"),
+        };
 
-    // this batch updates both contacts in one call
-    let mut batch = Batch::new("https://instance.crm.dynamics.com/");
-    batch.update(&testy_contact).unwrap();
-    batch.update(&marianne_contact).unwrap();
+        let marianne_contact = Contact {
+            contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789abc").into_dataverse_result()?,
+            firstname: String::from("Marianne"),
+            lastname: String::from("McTestface"),
+        };
 
+        // this batch creates both contacts in one call
+        let mut batch = Batch::new("https://instance.crm.dynamics.com/");
+        batch.update(&testy_contact)?;
+        batch.update(&marianne_contact)?;
+
+        let client = Client::new_dummy(); // Please replace this with your preferred authentication method
+        client.execute(&batch).await?;
+        Ok(())
+    }
+
+    #[derive(Serialize)]
+    struct Contact {
+        contactid: Uuid,
+        firstname: String,
+        lastname: String,
+    }
+
+    impl WriteEntity for Contact {}
+
+    impl Reference for Contact {
+        fn get_reference(&self) -> ReferenceStruct {
+            ReferenceStruct::new(
+                "contacts",
+                self.contactid,
+            )
+        }
+    }
     ```
     */
     pub fn update(&mut self, entity: &impl WriteEntity) -> Result<()> {
@@ -210,23 +290,56 @@ impl Batch {
 
     # Examples
     ```rust
-    let testy_contact = Contact {
-        contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789012").unwrap(),
-        firstname: String::from("Testy"),
-        lastname: String::from("McTestface"),
+    use uuid::Uuid;
+    use serde::Serialize;
+    use powerplatform_dataverse_service_client::{
+        batch::Batch,
+        client::Client,
+        entity::WriteEntity,
+        reference::{Reference, ReferenceStruct},
+        result::{Result, IntoDataverseResult}
     };
 
-    let marianne_contact = Contact {
-        contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789abc").unwrap(),
-        firstname: String::from("Marianne"),
-        lastname: String::from("McTestface"),
-    };
+    async fn test() -> Result<()> {
+        let testy_contact = Contact {
+            contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789012").into_dataverse_result()?,
+            firstname: String::from("Testy"),
+            lastname: String::from("McTestface"),
+        };
 
-    // this batch creates both contacts in one call
-    let mut batch = Batch::new("https://instance.crm.dynamics.com/");
-    batch.upsert(&testy_contact).unwrap();
-    batch.upsert(&marianne_contact).unwrap();
+        let marianne_contact = Contact {
+            contactid: Uuid::parse_str("12345678-1234-1234-1234-123456789abc").into_dataverse_result()?,
+            firstname: String::from("Marianne"),
+            lastname: String::from("McTestface"),
+        };
 
+        // this batch creates both contacts in one call
+        let mut batch = Batch::new("https://instance.crm.dynamics.com/");
+        batch.upsert(&testy_contact)?;
+        batch.upsert(&marianne_contact)?;
+
+        let client = Client::new_dummy(); // Please replace this with your preferred authentication method
+        client.execute(&batch).await?;
+        Ok(())
+    }
+
+    #[derive(Serialize)]
+    struct Contact {
+        contactid: Uuid,
+        firstname: String,
+        lastname: String,
+    }
+
+    impl WriteEntity for Contact {}
+
+    impl Reference for Contact {
+        fn get_reference(&self) -> ReferenceStruct {
+            ReferenceStruct::new(
+                "contacts",
+                self.contactid,
+            )
+        }
+    }
     ```
     */
     pub fn upsert(&mut self, entity: &impl WriteEntity) -> Result<()> {
@@ -256,21 +369,36 @@ impl Batch {
 
     # Examples
     ```rust
-    let testy_reference = ReferenceStruct::new(
-        "contacts",
-        Uuid::parse_str("12345678-1234-1234-1234-123456789012").unwrap()
-    );
+    use uuid::Uuid;
+    use serde::Serialize;
+    use powerplatform_dataverse_service_client::{
+        batch::Batch,
+        client::Client,
+        entity::WriteEntity,
+        reference::{Reference, ReferenceStruct},
+        result::{Result, IntoDataverseResult}
+    };
 
-    let marianne_reference = ReferenceStruct::new(
-        "contacts",
-        Uuid::parse_str("12345678-1234-1234-1234-123456789abc").unwrap()
-    );
+    async fn test() -> Result<()> {
+        let testy_contact = ReferenceStruct::new(
+            "contacts",
+            Uuid::parse_str("12345678-1234-1234-1234-123456789012").into_dataverse_result()?
+        );
 
-    // this batch creates both contacts in one call
-    let mut batch = Batch::new("https://instance.crm.dynamics.com/");
-    batch.delete(&testy_reference).unwrap();
-    batch.delete(&marianne_reference).unwrap();
+        let marianne_contact = ReferenceStruct::new(
+            "contacts",
+            Uuid::parse_str("12345678-1234-1234-1234-123456789abc").into_dataverse_result()?
+        );
 
+        // this batch creates both contacts in one call
+        let mut batch = Batch::new("https://instance.crm.dynamics.com/");
+        batch.delete(&testy_contact)?;
+        batch.delete(&marianne_contact)?;
+
+        let client = Client::new_dummy(); // Please replace this with your preferred authentication method
+        client.execute(&batch).await?;
+        Ok(())
+    }
     ```
     */
     pub fn delete(&mut self, entity: &impl Reference) -> Result<()> {

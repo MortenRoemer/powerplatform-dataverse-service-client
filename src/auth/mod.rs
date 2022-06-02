@@ -5,6 +5,10 @@ The main trait here is the `Authenticate` trait which encapsulates a method
 of acquiring a token for Bearer authentication:
 
 ```rust
+use std::sync::Arc;
+use async_trait::async_trait;
+use powerplatform_dataverse_service_client::result::Result;
+
 #[async_trait]
 pub trait Authenticate {
     async fn get_valid_token(&self) -> Result<Arc<String>>;
@@ -19,6 +23,7 @@ use async_trait::async_trait;
 use crate::result::Result;
 
 pub mod client_secret;
+pub mod no_auth;
 
 /**
 trait for methods that result in the acquisition of tokens usable
