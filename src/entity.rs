@@ -13,6 +13,13 @@ the following functions in `Client`:
 
 # Examples
 ```rust
+use serde::Deserialize;
+use uuid::Uuid;
+use powerplatform_dataverse_service_client::{
+    entity::ReadEntity,
+    select::Select
+};
+
 #[derive(Deserialize)]
 struct Contact {
     contactid: Uuid,
@@ -43,6 +50,13 @@ the following functions in `Client`:
 
 # Examples
 ```rust
+use serde::Serialize;
+use uuid::Uuid;
+use powerplatform_dataverse_service_client::{
+    entity::WriteEntity,
+    reference::{Reference, ReferenceStruct}
+};
+
 #[derive(Serialize)]
 struct Contact {
     contactid: Uuid,
