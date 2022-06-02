@@ -514,11 +514,13 @@ impl<A: Authenticate> Client<A> {
     ```rust
     use serde::Deserialize;
     use uuid::Uuid;
-    use powerplatform_dataverse_service_client::client::Client;
-    use powerplatform_dataverse_service_client::entity::ReadEntity;
-    use powerplatform_dataverse_service_client::reference::ReferenceStruct;
-    use powerplatform_dataverse_service_client::result::{IntoDataverseResult, Result};
-    use powerplatform_dataverse_service_client::select::Select;
+    use powerplatform_dataverse_service_client::{
+        client::Client,
+        entity::ReadEntity,
+        reference::ReferenceStruct,
+        result::{IntoDataverseResult, Result},
+        select::Select
+    };
     
     async fn test() -> Result<()> {
         let client = Client::new_dummy(); // Please replace this with your preferred authentication method
