@@ -1,8 +1,6 @@
 name: Rust
 
 on:
-  push:
-    branches: [ main ]
   pull_request:
     branches: [ main ]
 
@@ -24,5 +22,3 @@ jobs:
       run: cargo build
     - name: Run tests
       run: cargo test
-    - name: Publish to crates.io
-      run: cargo publish --token $CRATES_IO_TOKEN
