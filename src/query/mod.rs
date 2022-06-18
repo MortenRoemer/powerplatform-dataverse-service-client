@@ -10,7 +10,7 @@ possible querying options.
 use uuid::Uuid;
 use serde::Deserialize;
 use powerplatform_dataverse_service_client::{
-    client::Client,
+    client::{Client, Page},
     entity::ReadEntity,
     result::Result,
     select::Select,
@@ -29,7 +29,7 @@ async fn test() -> Result<()> {
         .order(vec![Order::Ascending("lastname")]);
 
     let client = Client::new_dummy();
-    let contacts: Vec<Contact> = client.retrieve_multiple(&query).await?;
+    let contacts: Page<Contact> = client.retrieve_multiple(&query).await?;
     Ok(())
 }
 
@@ -70,7 +70,7 @@ possible querying options.
 use uuid::Uuid;
 use serde::Deserialize;
 use powerplatform_dataverse_service_client::{
-    client::Client,
+    client::{Client, Page},
     entity::ReadEntity,
     result::Result,
     select::Select,
@@ -89,7 +89,7 @@ async fn test() -> Result<()> {
         .order(vec![Order::Ascending("lastname")]);
 
     let client = Client::new_dummy();
-    let contacts: Vec<Contact> = client.retrieve_multiple(&query).await?;
+    let contacts: Page<Contact> = client.retrieve_multiple(&query).await?;
     Ok(())
 }
 
