@@ -8,8 +8,8 @@ You can create a client with the functions provided by this module.
 ```rust
 use powerplatform_dataverse_service_client::client::Client;
 
-let client_id = String::from("<clientid>");
-let client_secret = String::from("<clientsecret>");
+let client_id = "<clientid>";
+let client_secret = "<clientsecret>";
 
 let client = Client::with_client_secret_auth(
     "https://instance.crm.dynamics.com/",
@@ -20,6 +20,7 @@ let client = Client::with_client_secret_auth(
 ```
 */
 
+use std::borrow::Cow;
 use std::time::Duration;
 
 use lazy_static::lazy_static;
@@ -55,8 +56,8 @@ connection-pooling.
 ```rust
 use powerplatform_dataverse_service_client::client::Client;
 
-let client_id = String::from("<clientid>");
-let client_secret = String::from("<clientsecret>");
+let client_id = "<clientid>";
+let client_secret ="<clientsecret>";
 
 let client = Client::with_client_secret_auth(
     "https://instance.crm.dynamics.com/",
@@ -66,13 +67,13 @@ let client = Client::with_client_secret_auth(
 );
 ```
 */
-pub struct Client<A: Authenticate> {
-    pub url: &'static str,
+pub struct Client<'url, A: Authenticate> {
+    pub url: Cow<'url, str>,
     backend: reqwest::Client,
     auth: A,
 }
 
-impl Client<ClientSecretAuth> {
+impl<'url> Client<'url, ClientSecretAuth> {
     /**
     Creates a dataverse client that uses client/secret authentication
 
@@ -85,8 +86,8 @@ impl Client<ClientSecretAuth> {
     ```rust
     use powerplatform_dataverse_service_client::client::Client;
 
-    let client_id = String::from("<clientid>");
-    let client_secret = String::from("<clientsecret>");
+    let client_id = "<clientid>";
+    let client_secret = "<clientsecret>";
 
     let client = Client::with_client_secret_auth(
         "https://instance.crm.dynamics.com/",
@@ -97,11 +98,14 @@ impl Client<ClientSecretAuth> {
     ```
     */
     pub fn with_client_secret_auth(
-        url: &'static str,
-        tenant_id: &'static str,
-        client_id: String,
-        client_secret: String,
+        url: impl Into<Cow<'url, str>>,
+        tenant_id: &str,
+        client_id: impl Into<String>,
+        client_secret: impl Into<String>,
     ) -> Self {
+        let url = url.into();
+        let client_id = client_id.into();
+        let client_secret = client_secret.into();
         let client = reqwest::Client::builder()
             .https_only(true)
             .connect_timeout(Duration::from_secs(120))
@@ -124,7 +128,7 @@ impl Client<ClientSecretAuth> {
     }
 }
 
-impl Client<NoAuth> {
+impl<'url> Client<'url, NoAuth> {
     /**
     Creates a dummy Client that will return errors every time its functions are used
 
@@ -144,7 +148,7 @@ impl Client<NoAuth> {
     }
 }
 
-impl<A: Authenticate> Client<A> {
+impl<'url, A: Authenticate> Client<'url, A> {
     /**
     Creates a dataverse client with a custom authentication handler and backend
 
@@ -190,7 +194,8 @@ impl<A: Authenticate> Client<A> {
     # }
     ```
     */
-    pub fn new(url: &'static str, backend: reqwest::Client, auth: A) -> Self {
+    pub fn new(url: impl Into<Cow<'url, str>>, backend: reqwest::Client, auth: A) -> Self {
+        let url = url.into();
         Self { url, backend, auth }
     }
 
@@ -589,7 +594,8 @@ impl<A: Authenticate> Client<A> {
     give the option to do that
 
     Please note that if you don't specify a limit then the client will try to retrieve
-    all matching records. This can take a lot of time.
+    up to 5000 records. Further records can then be retrieved with the `retrieve_next_page()`
+    function
 
     This may fail for any of these reasons
     - An authentication failure
@@ -601,7 +607,7 @@ impl<A: Authenticate> Client<A> {
     use uuid::Uuid;
     use serde::Deserialize;
     use powerplatform_dataverse_service_client::{
-        client::Client,
+        client::{Client, Page},
         entity::ReadEntity,
         reference::ReferenceStruct,
         result::{IntoDataverseResult, Result},
@@ -613,7 +619,7 @@ impl<A: Authenticate> Client<A> {
         // this query retrieves the first 3 contacts
         let query = Query::new("contacts").limit(3);
         let client = Client::new_dummy(); // Please replace this with your preferred authentication method
-        let contacts: Vec<Contact> = client.retrieve_multiple(&query).await?;
+        let contacts: Page<Contact> = client.retrieve_multiple(&query).await?;
         Ok(())
     }
 
@@ -633,16 +639,97 @@ impl<A: Authenticate> Client<A> {
     }
     ```
     */
-    pub async fn retrieve_multiple<E: ReadEntity>(&self, query: &Query) -> Result<Vec<E>> {
+    pub async fn retrieve_multiple<E: ReadEntity>(&self, query: &Query) -> Result<Page<E>> {
         let columns = E::get_columns();
-        let mut url_path = Some(self.build_query_url(query.logical_name, columns, query));
-        let mut entities = Vec::new();
+        let url_path = self.build_query_url(query.logical_name, columns, query);
 
-        while url_path.is_some() {
+        let response = self
+            .backend
+            .get(url_path)
+            .bearer_auth(self.auth.get_valid_token().await?)
+            .header("OData-MaxVersion", "4.0")
+            .header("OData-Version", "4.0")
+            .header("Accept", "application/json")
+            .send()
+            .await
+            .into_dataverse_result()?;
+
+        if response.status().is_client_error() || response.status().is_server_error() {
+            let error_message = response
+                .text()
+                .await
+                .unwrap_or_else(|_| String::from("no error details provided from server"));
+            return Err(DataverseError::new(error_message));
+        }
+
+        let content = response.bytes().await.into_dataverse_result()?;
+        let result = serde_json::from_slice(content.as_ref()).into_dataverse_result()?;
+
+        match result {
+            RetrieveMultipleResult {entities, next_link} => {
+                Ok(Page::new(1, entities, next_link))
+            }
+        }
+    }
+
+    /**
+    Continues a previous query by fetching the next records after a `Page`
+
+    You can check with `is_incomplete()` if there are further records available to a query 
+
+    This may fail for any of these reasons
+    - An authentication failure
+    - A serde deserialization error
+    - Any http client or server error
+    - The query already finished with the last page
+
+    # Examples
+    ```rust
+    use uuid::Uuid;
+    use serde::Deserialize;
+    use powerplatform_dataverse_service_client::{
+        client::{Client, Page},
+        entity::ReadEntity,
+        reference::ReferenceStruct,
+        result::{IntoDataverseResult, Result},
+        select::Select,
+        query::Query
+    };
+
+    async fn test() -> Result<()> {
+        let query = Query::new("contacts");
+        let client = Client::new_dummy(); // Please replace this with your preferred authentication method
+        let contact_page1: Page<Contact> = client.retrieve_multiple(&query).await?;
+
+        if contact_page1.is_incomplete() {
+            let contact_page2 = client.retrieve_next_page(&contact_page1).await?;
+        }
+
+        Ok(())
+    }
+
+    #[derive(Deserialize)]
+    struct Contact {
+        contactid: Uuid,
+        firstname: String,
+        lastname: String,
+    }
+
+    impl ReadEntity for Contact {}
+
+    impl Select for Contact {
+        fn get_columns() -> &'static [&'static str] {
+            &["contactid", "firstname", "lastname"]
+        }
+    }
+    ```
+    */
+    pub async fn retrieve_next_page<E: ReadEntity>(&self, previous_page: &Page<E>) -> Result<Page<E>> {
+        if let Some(next_link) = &previous_page.next_link {
             let response = self
                 .backend
-                .get(url_path.take().unwrap())
-                .bearer_auth(self.auth.get_valid_token().await?.clone())
+                .get(next_link)
+                .bearer_auth(self.auth.get_valid_token().await?)
                 .header("OData-MaxVersion", "4.0")
                 .header("OData-Version", "4.0")
                 .header("Accept", "application/json")
@@ -659,13 +746,17 @@ impl<A: Authenticate> Client<A> {
             }
 
             let content = response.bytes().await.into_dataverse_result()?;
-            let mut result_entities: EntityCollection<E> =
-                serde_json::from_slice(content.as_ref()).into_dataverse_result()?;
-            entities.append(&mut result_entities.value);
-            url_path = result_entities.next_link
-        }
+            let result = serde_json::from_slice(content.as_ref()).into_dataverse_result()?;
 
-        Ok(entities)
+            match result {
+                RetrieveMultipleResult {entities, next_link} => {
+                    Ok(Page::new(previous_page.number + 1, entities, next_link))
+                }
+            }
+        }
+        else {
+            Err(DataverseError::new(String::from("There is no next page to retrieve")))
+        }
     }
 
     /**
@@ -823,9 +914,41 @@ impl<A: Authenticate> Client<A> {
     }
 }
 
+/**
+A page of retrieved entites by the `retrieve_multiple()` and `retrieve_next_page()`
+by a client instance 
+*/
+#[derive(Debug)]
+pub struct Page<E> {
+    pub number: u32,
+    pub entities: Vec<E>,
+    next_link: Option<String>,
+}
+
+impl<E> Page<E> {
+    fn new(number: u32, entities: Vec<E>, next_link: Option<String>) -> Self {
+        Self {
+            number,
+            entities,
+            next_link,
+        }
+    }
+
+    /// Indicates if there are more records available in the query after this page
+    pub fn is_incomplete(&self) -> bool {
+        self.next_link.is_some()
+    }
+
+    /// Transforms the page into its content as a `Vec`
+    pub fn into_inner(self) -> Vec<E> {
+        self.entities
+    }
+}
+
 #[derive(Deserialize)]
-struct EntityCollection<E> {
-    value: Vec<E>,
+struct RetrieveMultipleResult<E> {
+    #[serde(rename = "value")]
+    entities: Vec<E>,
     #[serde(rename = "@odata.nextLink")]
     next_link: Option<String>,
 }
