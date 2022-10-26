@@ -8,8 +8,8 @@ You can create a client with the functions provided by this module.
 ```rust
 use powerplatform_dataverse_service_client::client::Client;
 
-let client_id = String::from("<clientid>");
-let client_secret = String::from("<clientsecret>");
+let client_id = "<clientid>";
+let client_secret = "<clientsecret>";
 
 let client = Client::with_client_secret_auth(
     "https://instance.crm.dynamics.com/",
@@ -20,6 +20,7 @@ let client = Client::with_client_secret_auth(
 ```
 */
 
+use std::borrow::Cow;
 use std::time::Duration;
 
 use lazy_static::lazy_static;
@@ -55,8 +56,8 @@ connection-pooling.
 ```rust
 use powerplatform_dataverse_service_client::client::Client;
 
-let client_id = String::from("<clientid>");
-let client_secret = String::from("<clientsecret>");
+let client_id = "<clientid>";
+let client_secret ="<clientsecret>";
 
 let client = Client::with_client_secret_auth(
     "https://instance.crm.dynamics.com/",
@@ -66,13 +67,13 @@ let client = Client::with_client_secret_auth(
 );
 ```
 */
-pub struct Client<A: Authenticate> {
-    pub url: &'static str,
+pub struct Client<'url, A: Authenticate> {
+    pub url: Cow<'url, str>,
     backend: reqwest::Client,
     auth: A,
 }
 
-impl Client<ClientSecretAuth> {
+impl<'url> Client<'url, ClientSecretAuth> {
     /**
     Creates a dataverse client that uses client/secret authentication
 
@@ -85,8 +86,8 @@ impl Client<ClientSecretAuth> {
     ```rust
     use powerplatform_dataverse_service_client::client::Client;
 
-    let client_id = String::from("<clientid>");
-    let client_secret = String::from("<clientsecret>");
+    let client_id = "<clientid>";
+    let client_secret = "<clientsecret>";
 
     let client = Client::with_client_secret_auth(
         "https://instance.crm.dynamics.com/",
@@ -97,11 +98,14 @@ impl Client<ClientSecretAuth> {
     ```
     */
     pub fn with_client_secret_auth(
-        url: &'static str,
-        tenant_id: &'static str,
-        client_id: String,
-        client_secret: String,
+        url: impl Into<Cow<'url, str>>,
+        tenant_id: &str,
+        client_id: impl Into<String>,
+        client_secret: impl Into<String>,
     ) -> Self {
+        let url = url.into();
+        let client_id = client_id.into();
+        let client_secret = client_secret.into();
         let client = reqwest::Client::builder()
             .https_only(true)
             .connect_timeout(Duration::from_secs(120))
@@ -124,7 +128,7 @@ impl Client<ClientSecretAuth> {
     }
 }
 
-impl Client<NoAuth> {
+impl<'url> Client<'url, NoAuth> {
     /**
     Creates a dummy Client that will return errors every time its functions are used
 
@@ -144,7 +148,7 @@ impl Client<NoAuth> {
     }
 }
 
-impl<A: Authenticate> Client<A> {
+impl<'url, A: Authenticate> Client<'url, A> {
     /**
     Creates a dataverse client with a custom authentication handler and backend
 
@@ -190,7 +194,8 @@ impl<A: Authenticate> Client<A> {
     # }
     ```
     */
-    pub fn new(url: &'static str, backend: reqwest::Client, auth: A) -> Self {
+    pub fn new(url: impl Into<Cow<'url, str>>, backend: reqwest::Client, auth: A) -> Self {
+        let url = url.into();
         Self { url, backend, auth }
     }
 
