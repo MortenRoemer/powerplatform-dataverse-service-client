@@ -168,6 +168,7 @@ impl Reference for Contact {
 ```
 */
 
+pub mod action;
 pub mod auth;
 pub mod batch;
 pub mod client;
