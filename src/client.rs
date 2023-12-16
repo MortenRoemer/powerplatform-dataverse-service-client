@@ -20,11 +20,13 @@ let client = Client::with_client_secret_auth(
 ```
 */
 
+use std::future::Future;
 use std::{borrow::Cow, fmt::Display};
 use std::time::Duration;
 
 use lazy_static::lazy_static;
 use regex::Regex;
+use reqwest::{RequestBuilder, Response, Method};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -249,41 +251,41 @@ impl<'url, A: Authenticate> Client<'url, A> {
     ```
     */
     pub async fn create(&self, entity: &impl WriteEntity) -> Result<Uuid> {
-        let token = self.auth.get_valid_token().await?;
         let reference = entity.get_reference();
         let url_path = self.build_simple_url(reference.entity_name);
 
-        let response = self
-            .backend
-            .post(url_path)
-            .bearer_auth(token)
-            .header("OData-MaxVersion", "4.0")
-            .header("OData-Version", "4.0")
-            .header("Content-Type", "application/json; charset=utf-8")
-            .header("Accept", "application/json")
-            .body(serde_json::to_vec(entity).into_dataverse_result()?)
-            .send()
-            .await
-            .into_dataverse_result()?;
-
-        if response.status().is_client_error() || response.status().is_server_error() {
-            let error_message = response
-                .text()
-                .await
-                .unwrap_or_else(|_| String::from("no error details provided from server"));
-            return Err(DataverseError::new(error_message));
+        async fn handle_response(response: Response) -> Result<Uuid> {
+            if response.status().is_client_error() || response.status().is_server_error() {
+                let error_message = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| String::from("no error details provided from server"));
+                return Err(DataverseError::new(error_message));
+            }
+    
+            let header_value = response
+                .headers()
+                .get("OData-EntityId")
+                .ok_or_else(|| DataverseError::new("Dataverse provided no Uuid".to_string()))?;
+    
+            let uuid_segment = UUID_REGEX
+                .find(header_value.to_str().unwrap_or(""))
+                .ok_or_else(|| DataverseError::new("Dataverse provided no Uuid".to_string()))?;
+    
+            Uuid::parse_str(uuid_segment.as_str()).into_dataverse_result()
         }
 
-        let header_value = response
-            .headers()
-            .get("OData-EntityId")
-            .ok_or_else(|| DataverseError::new("Dataverse provided no Uuid".to_string()))?;
-
-        let uuid_segment = UUID_REGEX
-            .find(header_value.to_str().unwrap_or(""))
-            .ok_or_else(|| DataverseError::new("Dataverse provided no Uuid".to_string()))?;
-
-        Uuid::parse_str(uuid_segment.as_str()).into_dataverse_result()
+        self.request(
+            Method::POST, 
+            &url_path, 
+            move |request| {
+                Ok(request
+                    .header("Content-Type", "application/json")
+                    .body(serde_json::to_vec(entity).into_dataverse_result()?)
+                )
+            }, 
+            handle_response
+        ).await
     }
 
     /**
@@ -338,32 +340,21 @@ impl<'url, A: Authenticate> Client<'url, A> {
     ```
     */
     pub async fn update(&self, entity: &impl WriteEntity) -> Result<()> {
-        let token = self.auth.get_valid_token().await?;
         let reference = entity.get_reference();
         let url_path = self.build_targeted_url(reference.entity_name, reference.entity_id);
 
-        let response = self
-            .backend
-            .patch(url_path)
-            .bearer_auth(token)
-            .header("OData-MaxVersion", "4.0")
-            .header("OData-Version", "4.0")
-            .header("Content-Type", "application/json; charset=utf-8")
-            .header("If-Match", "*")
-            .body(serde_json::to_vec(entity).into_dataverse_result()?)
-            .send()
-            .await
-            .into_dataverse_result()?;
-
-        if response.status().is_client_error() || response.status().is_server_error() {
-            let error_message = response
-                .text()
-                .await
-                .unwrap_or_else(|_| String::from("no error details provided from server"));
-            return Err(DataverseError::new(error_message));
-        }
-
-        Ok(())
+        self.request(
+            Method::PATCH,
+            &url_path, 
+            move |request| {
+                Ok(request
+                    .header("Content-Type", "application/json")
+                    .header("If-Match", "*")
+                    .body(serde_json::to_vec(entity).into_dataverse_result()?)
+                )
+            }, 
+            handle_empty_response
+        ).await
     }
 
     /**
@@ -417,31 +408,20 @@ impl<'url, A: Authenticate> Client<'url, A> {
     ```
     */
     pub async fn upsert(&self, entity: &impl WriteEntity) -> Result<()> {
-        let token = self.auth.get_valid_token().await?;
         let reference = entity.get_reference();
         let url_path = self.build_targeted_url(reference.entity_name, reference.entity_id);
 
-        let response = self
-            .backend
-            .patch(url_path)
-            .bearer_auth(token)
-            .header("OData-MaxVersion", "4.0")
-            .header("OData-Version", "4.0")
-            .header("Content-Type", "application/json; charset=utf-8")
-            .body(serde_json::to_vec(entity).into_dataverse_result()?)
-            .send()
-            .await
-            .into_dataverse_result()?;
-
-        if response.status().is_client_error() || response.status().is_server_error() {
-            let error_message = response
-                .text()
-                .await
-                .unwrap_or_else(|_| String::from("no error details provided from server"));
-            return Err(DataverseError::new(error_message));
-        }
-
-        Ok(())
+        self.request(
+            Method::PATCH, 
+            &url_path, 
+            move |request| {
+                Ok(request
+                    .header("Content-Type", "application/json")
+                    .body(serde_json::to_vec(entity).into_dataverse_result()?)
+                )
+            }, 
+            handle_empty_response
+        ).await
     }
 
     /**
@@ -477,29 +457,15 @@ impl<'url, A: Authenticate> Client<'url, A> {
     ```
     */
     pub async fn delete(&self, reference: &impl Reference) -> Result<()> {
-        let token = self.auth.get_valid_token().await?;
         let reference = reference.get_reference();
         let url_path = self.build_targeted_url(reference.entity_name, reference.entity_id);
 
-        let response = self
-            .backend
-            .delete(url_path)
-            .bearer_auth(token)
-            .header("OData-MaxVersion", "4.0")
-            .header("OData-Version", "4.0")
-            .send()
-            .await
-            .into_dataverse_result()?;
-
-        if response.status().is_client_error() || response.status().is_server_error() {
-            let error_message = response
-                .text()
-                .await
-                .unwrap_or_else(|_| String::from("no error details provided from server"));
-            return Err(DataverseError::new(error_message));
-        }
-
-        Ok(())
+        self.request(
+            Method::DELETE, 
+            &url_path, 
+            move |request| Ok(request), 
+            handle_empty_response
+        ).await
     }
 
     /**
@@ -558,32 +524,29 @@ impl<'url, A: Authenticate> Client<'url, A> {
     ```
     */
     pub async fn retrieve<E: ReadEntity>(&self, reference: &impl Reference) -> Result<E> {
-        let token = self.auth.get_valid_token().await?;
         let reference = reference.get_reference();
         let columns = E::get_columns();
         let url_path = self.build_retrieve_url(reference.entity_name, reference.entity_id, columns);
 
-        let response = self
-            .backend
-            .get(url_path)
-            .bearer_auth(token)
-            .header("OData-MaxVersion", "4.0")
-            .header("OData-Version", "4.0")
-            .header("Accept", "application/json")
-            .send()
-            .await
-            .into_dataverse_result()?;
-
-        if response.status().is_client_error() || response.status().is_server_error() {
-            let error_message = response
-                .text()
-                .await
-                .unwrap_or_else(|_| String::from("no error details provided from server"));
-            return Err(DataverseError::new(error_message));
+        async fn handle_response<E: ReadEntity>(response: Response) -> Result<E> {
+            if response.status().is_client_error() || response.status().is_server_error() {
+                let error_message = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| String::from("no error details provided from server"));
+                return Err(DataverseError::new(error_message));
+            }
+    
+            let content = response.bytes().await.into_dataverse_result()?;
+            serde_json::from_slice(content.as_ref()).into_dataverse_result()
         }
 
-        let content = response.bytes().await.into_dataverse_result()?;
-        serde_json::from_slice(content.as_ref()).into_dataverse_result()
+        self.request(
+            Method::GET, 
+            &url_path, 
+            move |request| Ok(request), 
+            handle_response
+        ).await
     }
 
     /**
@@ -644,33 +607,31 @@ impl<'url, A: Authenticate> Client<'url, A> {
         let columns = E::get_columns();
         let url_path = self.build_query_url(query.logical_name, columns, query);
 
-        let response = self
-            .backend
-            .get(url_path)
-            .bearer_auth(self.auth.get_valid_token().await?)
-            .header("OData-MaxVersion", "4.0")
-            .header("OData-Version", "4.0")
-            .header("Accept", "application/json")
-            .send()
-            .await
-            .into_dataverse_result()?;
-
-        if response.status().is_client_error() || response.status().is_server_error() {
-            let error_message = response
-                .text()
-                .await
-                .unwrap_or_else(|_| String::from("no error details provided from server"));
-            return Err(DataverseError::new(error_message));
-        }
-
-        let content = response.bytes().await.into_dataverse_result()?;
-        let result = serde_json::from_slice(content.as_ref()).into_dataverse_result()?;
-
-        match result {
-            RetrieveMultipleResult {entities, next_link} => {
-                Ok(Page::new(1, entities, next_link))
+        async fn handle_response<E: ReadEntity>(response: Response) -> Result<Page<E>> {
+            if response.status().is_client_error() || response.status().is_server_error() {
+                let error_message = response
+                    .text()
+                    .await
+                    .unwrap_or_else(|_| String::from("no error details provided from server"));
+                return Err(DataverseError::new(error_message));
+            }
+    
+            let content = response.bytes().await.into_dataverse_result()?;
+            let result = serde_json::from_slice(content.as_ref()).into_dataverse_result()?;
+    
+            match result {
+                RetrieveMultipleResult {entities, next_link} => {
+                    Ok(Page::new(entities, next_link))
+                }
             }
         }
+
+        self.request(
+            Method::GET, 
+            &url_path, 
+            move |request| Ok(request),
+            handle_response
+        ).await
     }
 
     /**
@@ -726,18 +687,11 @@ impl<'url, A: Authenticate> Client<'url, A> {
     ```
     */
     pub async fn retrieve_next_page<E: ReadEntity>(&self, previous_page: &Page<E>) -> Result<Page<E>> {
-        if let Some(next_link) = &previous_page.next_link {
-            let response = self
-                .backend
-                .get(next_link)
-                .bearer_auth(self.auth.get_valid_token().await?)
-                .header("OData-MaxVersion", "4.0")
-                .header("OData-Version", "4.0")
-                .header("Accept", "application/json")
-                .send()
-                .await
-                .into_dataverse_result()?;
-
+        if previous_page.next_link.is_none() {
+            return Err(DataverseError::new(String::from("There is no next page to retrieve")))
+        }
+        
+        async fn handle_response<E: ReadEntity>(response: Response) -> Result<Page<E>> {
             if response.status().is_client_error() || response.status().is_server_error() {
                 let error_message = response
                     .text()
@@ -745,19 +699,23 @@ impl<'url, A: Authenticate> Client<'url, A> {
                     .unwrap_or_else(|_| String::from("no error details provided from server"));
                 return Err(DataverseError::new(error_message));
             }
-
+    
             let content = response.bytes().await.into_dataverse_result()?;
             let result = serde_json::from_slice(content.as_ref()).into_dataverse_result()?;
-
+    
             match result {
                 RetrieveMultipleResult {entities, next_link} => {
-                    Ok(Page::new(previous_page.number + 1, entities, next_link))
+                    Ok(Page::new( entities, next_link))
                 }
             }
         }
-        else {
-            Err(DataverseError::new(String::from("There is no next page to retrieve")))
-        }
+
+        self.request(
+            Method::GET, 
+            previous_page.next_link.as_ref().unwrap(), 
+            move |request| Ok(request),
+            handle_response
+        ).await
     }
 
     /**
@@ -828,34 +786,19 @@ impl<'url, A: Authenticate> Client<'url, A> {
     ```
     */
     pub async fn execute(&self, batch: &Batch) -> Result<()> {
-        let token = self.auth.get_valid_token().await?;
         let url_path = self.build_simple_url("$batch");
 
-        let response = self
-            .backend
-            .post(url_path)
-            .bearer_auth(token)
-            .header("OData-MaxVersion", "4.0")
-            .header("OData-Version", "4.0")
-            .header(
-                "Content-Type",
-                format!("multipart/mixed; boundary=batch_{}", batch.get_batch_id()),
-            )
-            .header("Accept", "application/json")
-            .body(batch.to_string())
-            .send()
-            .await
-            .into_dataverse_result()?;
-
-        if response.status().is_client_error() || response.status().is_server_error() {
-            let error_message = response
-                .text()
-                .await
-                .unwrap_or_else(|_| String::from("no error details provided from server"));
-            return Err(DataverseError::new(error_message));
-        }
-
-        Ok(())
+        self.request(
+            Method::POST, 
+            &url_path, 
+            move |request| {
+                Ok(request
+                    .header("Content-Type", format!("multipart/mixed; boundary=batch_{}", batch.get_batch_id()))
+                    .body(batch.to_string())
+                )
+            }, 
+            handle_empty_response
+        ).await
     }
 
     /**
@@ -883,25 +826,42 @@ impl<'url, A: Authenticate> Client<'url, A> {
     ```
     */
     pub async fn merge(&self, entity_name: impl Display, target: Uuid, subordinate: Uuid) -> Result<()> {
-        let token = self.auth.get_valid_token().await?;
         let url_path = self.build_simple_url("Merge");
-        let entity_name = entity_name.to_string();
-        let merge_request = MergeRequest::new(&entity_name, target, subordinate, false);
 
-        let response = self.backend.post(url_path)
+        self.request(
+            Method::POST,
+            &url_path, 
+            move |request| {
+                let entity_name = entity_name.to_string();
+                let merge_request = MergeRequest::new(&entity_name, target, subordinate, false);
+
+                Ok(request
+                    .header("Content-Type", "application/json")
+                    .body(serde_json::to_vec(&merge_request).into_dataverse_result()?)
+                )
+            }, 
+            handle_empty_response,
+        ).await
+    }
+
+    async fn request<E, Fut>(
+        &self,
+        method: Method,
+        url: &str, 
+        request_preparer: impl FnOnce(RequestBuilder) -> Result<RequestBuilder>,
+        response_consumer: impl FnOnce(Response) -> Fut,
+    ) -> Result<E> 
+    where Fut: Future<Output = Result<E>>{
+        let token = self.auth.get_valid_token().await?;
+
+        let response = request_preparer(self.backend.request(method, url))?
             .bearer_auth(token)
             .header("OData-MaxVersion", "4.0")
             .header("OData-Version", "4.0")
-            .header("Content-Type", "application/json")
-            .body(serde_json::to_vec(&merge_request).into_dataverse_result()?)
+            .header("Accept", "application/json")
             .send().await.into_dataverse_result()?;
 
-        if response.status().is_client_error() || response.status().is_server_error() {
-            let error_message = response.text().await.unwrap_or_else(|_| String::from("no error details provided from server"));
-            return Err(DataverseError::new(error_message));
-        }
-
-        Ok(())
+        response_consumer(response).await
     }
 
     fn build_simple_url(&self, table_name: impl Display) -> String {
@@ -961,21 +921,28 @@ impl<'url, A: Authenticate> Client<'url, A> {
     }
 }
 
+async fn handle_empty_response(response: Response) -> Result<()> {
+    if response.status().is_client_error() || response.status().is_server_error() {
+        let error_message = response.text().await.unwrap_or_else(|_| String::from("no error details provided from server"));
+        return Err(DataverseError::new(error_message));
+    }
+
+    Ok(())
+}
+
 /**
 A page of retrieved entites by the `retrieve_multiple()` and `retrieve_next_page()`
 by a client instance 
 */
 #[derive(Debug)]
 pub struct Page<E> {
-    pub number: u32,
     pub entities: Vec<E>,
     next_link: Option<String>,
 }
 
 impl<E> Page<E> {
-    fn new(number: u32, entities: Vec<E>, next_link: Option<String>) -> Self {
+    fn new(entities: Vec<E>, next_link: Option<String>) -> Self {
         Self {
-            number,
             entities,
             next_link,
         }
