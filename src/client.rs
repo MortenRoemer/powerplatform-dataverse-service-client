@@ -20,7 +20,7 @@ let client = Client::with_client_secret_auth(
 ```
 */
 
-use std::borrow::Cow;
+use std::{borrow::Cow, fmt::Display};
 use std::time::Duration;
 
 use lazy_static::lazy_static;
@@ -28,6 +28,7 @@ use regex::Regex;
 use serde::Deserialize;
 use uuid::Uuid;
 
+use crate::action::MergeRequest;
 use crate::{
     auth::{client_secret::ClientSecretAuth, Authenticate, no_auth::NoAuth},
     batch::Batch,
@@ -857,11 +858,57 @@ impl<'url, A: Authenticate> Client<'url, A> {
         Ok(())
     }
 
-    fn build_simple_url(&self, table_name: &str) -> String {
+    /**
+    Tries to merge two entities with and deactivates the subordinate after the process
+
+    This method is only supported for the following entities:
+    - account
+    - contact
+    - lead
+    - incident
+
+    # Examples
+    ```rust
+    use uuid::Uuid;
+    use powerplatform_dataverse_service_client::client::Client;
+    use powerplatform_dataverse_service_client::result::{IntoDataverseResult, Result};
+
+    async fn test() -> Result<()> {
+        let target_id = Uuid::parse_str("12345678-1234-1234-1234-123456789012").into_dataverse_result()?;
+        let subordinate_id = Uuid::parse_str("12345687-1234-1234-1234-123456879012").into_dataverse_result()?;
+
+        let client = Client::new_dummy(); // Please replace this with your preferred authentication method
+        client.merge("account", target_id, subordinate_id).await
+    }
+    ```
+    */
+    pub async fn merge(&self, entity_name: impl Display, target: Uuid, subordinate: Uuid) -> Result<()> {
+        let token = self.auth.get_valid_token().await?;
+        let url_path = self.build_simple_url("Merge");
+        let entity_name = entity_name.to_string();
+        let merge_request = MergeRequest::new(&entity_name, target, subordinate, false);
+
+        let response = self.backend.post(url_path)
+            .bearer_auth(token)
+            .header("OData-MaxVersion", "4.0")
+            .header("OData-Version", "4.0")
+            .header("Content-Type", "application/json")
+            .body(serde_json::to_vec(&merge_request).into_dataverse_result()?)
+            .send().await.into_dataverse_result()?;
+
+        if response.status().is_client_error() || response.status().is_server_error() {
+            let error_message = response.text().await.unwrap_or_else(|_| String::from("no error details provided from server"));
+            return Err(DataverseError::new(error_message));
+        }
+
+        Ok(())
+    }
+
+    fn build_simple_url(&self, table_name: impl Display) -> String {
         format!("{}api/data/v{}/{}", self.url, VERSION, table_name)
     }
 
-    fn build_targeted_url(&self, table_name: &str, target_id: Uuid) -> String {
+    fn build_targeted_url(&self, table_name: impl Display, target_id: Uuid) -> String {
         format!(
             "{}api/data/v{}/{}({})",
             self.url,
@@ -871,7 +918,7 @@ impl<'url, A: Authenticate> Client<'url, A> {
         )
     }
 
-    fn build_retrieve_url(&self, table_name: &str, target_id: Uuid, columns: &[&str]) -> String {
+    fn build_retrieve_url(&self, table_name: impl Display, target_id: Uuid, columns: &[&str]) -> String {
         let mut select = String::new();
         let mut comma_required = false;
 
@@ -894,7 +941,7 @@ impl<'url, A: Authenticate> Client<'url, A> {
         )
     }
 
-    fn build_query_url(&self, table_name: &str, columns: &[&str], query: &Query) -> String {
+    fn build_query_url(&self, table_name: impl Display, columns: &[&str], query: &Query) -> String {
         let mut select = String::new();
         let mut comma_required = false;
 
